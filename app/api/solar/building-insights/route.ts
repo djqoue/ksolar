@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { RUNTIME_FALLBACKS } from "@/lib/config/runtime-fallbacks";
 import { formatGoogleDate } from "@/lib/solar";
 import type { GoogleSolarSummary } from "@/types/solar";
 
@@ -162,7 +163,7 @@ function normalizeBuildingInsightsResponse(
 }
 
 export async function GET(request: NextRequest) {
-  const apiKey = process.env.GOOGLE_SOLAR_API_KEY;
+  const apiKey = process.env.GOOGLE_SOLAR_API_KEY || RUNTIME_FALLBACKS.googleSolarApiKey;
   if (!apiKey) {
     return NextResponse.json(
       { error: "GOOGLE_SOLAR_API_KEY is not configured." },

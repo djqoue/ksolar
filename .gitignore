@@ -2,6 +2,7 @@
 .next-dev
 node_modules
 .tools
+.vercel
 .env
 .env.local
 .env.*.local

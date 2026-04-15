@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { DEFAULT_MAP_CENTER, GOOGLE_MAP_LIBRARIES, createEmptyMapSelection } from "@/lib/maps";
+import { RUNTIME_FALLBACKS } from "@/lib/config/runtime-fallbacks";
 import { formatNumber } from "@/lib/utils";
 import { SOLAR_DEFAULTS } from "@/lib/config/solar";
 import type { SolarSelectionMatchSummary } from "@/lib/solar";
@@ -110,7 +111,8 @@ function buildSelection(overlays: OverlayRecord[]): MapSelectionSummary {
 
 export function Map({ value, onChange, onCenterChange, solarInsights, solarSelectionMatch }: MapProps) {
   const copy = useAppCopy();
-  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+  const googleMapsApiKey =
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || RUNTIME_FALLBACKS.googleMapsApiKey;
   const overlaysRef = useRef<OverlayRecord[]>([]);
   const mapRef = useRef<google.maps.Map | null>(null);
   const geocoderRef = useRef<google.maps.Geocoder | null>(null);
