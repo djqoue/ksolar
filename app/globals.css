@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 220 14% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 14% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 14% 9%;
+    --primary: 220 14% 9%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 9% 95%;
+    --secondary-foreground: 220 14% 9%;
+    --muted: 220 11% 95%;
+    --muted-foreground: 220 7% 38%;
+    --accent: 165 80% 33%;
+    --accent-foreground: 0 0% 100%;
+    --border: 220 8% 88%;
+    --input: 220 8% 88%;
+    --ring: 220 14% 9%;
+    --success: 165 80% 33%;
+    --danger: 0 78% 56%;
+    --chart-1: 220 14% 9%;
+    --chart-2: 165 80% 33%;
+    --chart-3: 220 7% 38%;
+    --chart-4: 220 9% 70%;
+    --radius: 0.875rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Avenir Next", "Helvetica Neue", "Segoe UI", sans-serif;
+    line-height: 1.5;
+    background-image:
+      radial-gradient(circle at top left, rgba(20, 184, 166, 0.04), transparent 18%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 247, 248, 1));
+  }
+}
+
+@layer components {
+  .surface-panel {
+    @apply rounded-[1.25rem] border border-border bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)];
+  }
+
+  .section-kicker {
+    @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground;
+  }
+
+  .metric-label {
+    @apply text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground;
+  }
+
+  .metric-value {
+    @apply text-base font-semibold tracking-tight text-slate-900;
+  }
+
+  .workflow-item {
+    @apply rounded-[1rem] border border-border bg-white px-4 py-3 transition;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
