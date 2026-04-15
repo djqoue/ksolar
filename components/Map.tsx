@@ -449,14 +449,14 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex h-[680px] flex-col gap-4 p-4 xl:h-[760px]">
-        <div className="rounded-[1.15rem] border border-border/70 bg-muted/20 p-4">
+      <CardContent className="flex flex-col gap-4 p-4 md:h-[680px] xl:h-[760px]">
+        <div className="rounded-[1.15rem] border border-border/70 bg-muted/20 p-3.5 sm:p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="section-kicker text-primary">{copy.map.toolsTitle}</div>
               <p className="mt-1 text-sm text-muted-foreground">{copy.map.toolHint}</p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="hidden flex-wrap gap-2 sm:flex">
               <div className="rounded-full border border-border/70 bg-background px-3 py-1.5 text-[11px] font-medium text-slate-700">
                 1. {copy.map.step1Title}
               </div>
@@ -469,9 +469,9 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             </div>
           </div>
         </div>
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto]">
           <div className="grid gap-2">
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
               <Input
                 placeholder={copy.map.searchPlaceholder}
                 value={searchValue}
@@ -483,15 +483,15 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
                   }
                 }}
               />
-              <Button variant="outline" size="sm" onClick={handleSearchClick} disabled={isSearching}>
+              <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleSearchClick} disabled={isSearching}>
                 <Search data-icon="inline-start" />
                 {isSearching ? copy.map.finding : copy.map.find}
               </Button>
-              <Button variant="outline" size="sm" onClick={handleUseMyLocation} disabled={isLocating}>
+              <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleUseMyLocation} disabled={isLocating}>
                 <LocateFixed data-icon="inline-start" />
                 {isLocating ? copy.map.locating : copy.map.useMyLocation}
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleUseCurrentMapCenter}>
+              <Button variant="ghost" size="sm" className="w-full sm:w-auto" onClick={handleUseCurrentMapCenter}>
                 <MapPin data-icon="inline-start" />
                 {copy.map.useMapCenter}
               </Button>
@@ -503,16 +503,18 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
               {copy.map.directGeocodeHint}
             </p>
           </div>
-          <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-2.5 text-sm">
-            <div className="metric-label">{copy.map.grossArea}</div>
-            <div className="metric-value mt-1">{formatNumber(summary.grossAreaM2, 1)} m²</div>
-          </div>
-          <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-2.5 text-sm">
-            <div className="metric-label">{copy.map.usableArea}</div>
-            <div className="metric-value mt-1">{formatNumber(summary.usableAreaM2, 1)} m²</div>
+          <div className="grid grid-cols-2 gap-3 xl:contents">
+            <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-2.5 text-sm">
+              <div className="metric-label">{copy.map.grossArea}</div>
+              <div className="metric-value mt-1">{formatNumber(summary.grossAreaM2, 1)} m²</div>
+            </div>
+            <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-2.5 text-sm">
+              <div className="metric-label">{copy.map.usableArea}</div>
+              <div className="metric-value mt-1">{formatNumber(summary.usableAreaM2, 1)} m²</div>
+            </div>
           </div>
         </div>
-        <div className="rounded-[1.1rem] border border-border/70 bg-muted/20 p-4">
+        <div className="rounded-[1.1rem] border border-border/70 bg-muted/20 p-3.5 sm:p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
             <Workflow className="size-4 text-primary" />
             {copy.map.toolsTitle}
@@ -546,6 +548,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             <Button
               variant={drawMode === "rectangle" ? "default" : "outline"}
               size="sm"
+              className="flex-1 sm:flex-none"
               onClick={() => {
                 setDrawMode("rectangle");
                 setLocationStatus(copy.map.step2Body);
@@ -558,6 +561,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
               <Button
                 variant={drawMode === "polygon" ? "default" : "outline"}
                 size="sm"
+                className="flex-1 sm:flex-none"
                 onClick={() => {
                   setDrawMode("polygon");
                   setLocationStatus(copy.map.step2Body);
@@ -570,24 +574,25 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             <Button
               variant={drawMode === null ? "secondary" : "ghost"}
               size="sm"
+              className="flex-1 sm:flex-none"
               onClick={() => setDrawMode(null)}
             >
               {copy.map.panTool}
             </Button>
             {drawMode ? (
-              <Button variant="ghost" size="sm" onClick={() => setDrawMode(null)}>
+              <Button variant="ghost" size="sm" className="w-full sm:w-auto" onClick={() => setDrawMode(null)}>
                 {copy.map.doneDrawing}
               </Button>
             ) : null}
           </div>
         </div>
-        <div className="relative flex-1 overflow-hidden rounded-[1.15rem] border border-border/70">
-          <div className="pointer-events-none absolute inset-x-4 top-4 z-10 flex flex-wrap items-center gap-2">
+        <div className="relative min-h-[360px] flex-1 overflow-hidden rounded-[1.15rem] border border-border/70 sm:min-h-[420px] md:min-h-0">
+          <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-center gap-2 sm:inset-x-4 sm:top-4">
             <div className="rounded-full bg-background/92 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm">
               <MapPin className="mr-1 inline size-3.5" />
               {copy.map.satelliteEnabled}
             </div>
-            <div className="rounded-full bg-background/92 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm">
+            <div className="hidden rounded-full bg-background/92 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm sm:block">
               {summary.shapes.length > 0 ? copy.map.step3Body : drawingExperience === "quick" ? copy.map.quickModeHint : copy.map.advancedModeHint}
             </div>
             {solarInsights ? (
@@ -597,7 +602,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             ) : null}
           </div>
           {solarSelectionMatch?.status === "outside-selection" ? (
-            <div className="absolute inset-x-4 bottom-4 z-10 rounded-xl border border-amber-300 bg-amber-50/95 px-4 py-3 text-sm text-amber-900 shadow-sm backdrop-blur">
+            <div className="absolute inset-x-3 bottom-3 z-10 rounded-xl border border-amber-300 bg-amber-50/95 px-4 py-3 text-sm text-amber-900 shadow-sm backdrop-blur sm:inset-x-4 sm:bottom-4">
               <div className="font-medium">{copy.solar.mapOverlayUnmatched}</div>
               {solarSelectionMatch.distanceToNearestShapeMeters !== null ? (
                 <div className="mt-1 text-xs text-amber-900/80">
@@ -607,7 +612,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             </div>
           ) : null}
           {solarSelectionMatch?.status === "inside-selection" ? (
-            <div className="absolute inset-x-4 bottom-4 z-10 rounded-xl border border-emerald-200 bg-emerald-50/95 px-4 py-3 text-sm text-emerald-900 shadow-sm backdrop-blur">
+            <div className="absolute inset-x-3 bottom-3 z-10 rounded-xl border border-emerald-200 bg-emerald-50/95 px-4 py-3 text-sm text-emerald-900 shadow-sm backdrop-blur sm:inset-x-4 sm:bottom-4">
               {copy.solar.mapOverlayMatched}
             </div>
           ) : null}

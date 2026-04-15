@@ -360,19 +360,19 @@ function DashboardShellContent() {
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,rgba(250,250,250,1),rgba(245,246,247,1))]">
       <section className="border-b border-border/70">
-        <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-4 py-5 lg:px-6">
+        <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-4 py-4 sm:gap-5 sm:py-5 lg:px-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl space-y-2">
               <div className="inline-flex w-fit items-center rounded-full border border-border bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                 {copy.header.badge}
               </div>
-              <h1 className="max-w-3xl text-balance text-[2rem] font-semibold tracking-tight text-slate-900 md:text-[3rem]">
+              <h1 className="max-w-3xl text-balance text-[1.75rem] font-semibold leading-tight tracking-tight text-slate-900 sm:text-[2.2rem] md:text-[3rem]">
                 {copy.header.title}
               </h1>
-              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{copy.workflow.subtitle}</p>
+              <p className="max-w-2xl text-sm leading-5 text-muted-foreground sm:leading-6">{copy.workflow.subtitle}</p>
             </div>
 
-            <div className="surface-panel p-2">
+            <div className="surface-panel p-2 sm:self-start">
               <div className="mb-2 px-2 section-kicker">
                 {copy.language.title}
               </div>
@@ -395,7 +395,7 @@ function DashboardShellContent() {
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <HeroMetric label={copy.workflow.currentFocus} value={activeStepState.title} />
             <HeroMetric label={copy.workflow.nextAction} value={nextAction} />
             <HeroMetric
@@ -410,7 +410,7 @@ function DashboardShellContent() {
         </div>
       </section>
 
-      <main className="mx-auto max-w-[1180px] px-4 py-5 lg:px-6">
+      <main className="mx-auto max-w-[1180px] px-4 py-4 sm:py-5 lg:px-6">
         <div className="grid gap-4">
           <Card className="overflow-hidden">
             <CardContent className="grid gap-4 pt-5">
@@ -421,7 +421,7 @@ function DashboardShellContent() {
                 />
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {steps.map((step) => {
                   const Icon = step.icon;
                   const isActive = activeStep === step.number;
@@ -443,7 +443,7 @@ function DashboardShellContent() {
                     >
                       <div className="flex items-start gap-3">
                         <div
-                          className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl ${
+                          className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl sm:size-9 ${
                             step.done ? "bg-accent text-accent-foreground" : step.unlocked ? step.tone : "bg-muted text-muted-foreground"
                           }`}
                         >
@@ -451,8 +451,8 @@ function DashboardShellContent() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="section-kicker">{copy.workflow.stepLabel} {step.number}</div>
-                          <div className="mt-1 text-[15px] font-semibold text-slate-900">{step.title}</div>
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                          <div className="mt-1 text-sm font-semibold text-slate-900 sm:text-[15px]">{step.title}</div>
+                          <p className="mt-1 text-xs leading-4 text-muted-foreground sm:leading-5">
                             {step.unlocked ? step.description : copy.workflow.lockedHint}
                           </p>
                         </div>
@@ -701,7 +701,7 @@ function StageFrame({ icon: Icon, stepNumber, tone, title, description, children
 
   return (
     <section className="surface-panel overflow-hidden">
-      <div className="border-b border-border/60 p-5 md:p-6">
+      <div className="border-b border-border/60 p-4 sm:p-5 md:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-4">
             <div className={`flex size-10 items-center justify-center rounded-xl ${tone}`}>
@@ -711,14 +711,14 @@ function StageFrame({ icon: Icon, stepNumber, tone, title, description, children
               <div className="section-kicker text-primary">
                 {copy.workflow.stepLabel} {stepNumber}
               </div>
-              <h2 className="mt-1 text-[1.4rem] font-semibold tracking-tight text-slate-900 md:text-[1.7rem]">{title}</h2>
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
+              <h2 className="mt-1 text-[1.2rem] font-semibold leading-tight tracking-tight text-slate-900 sm:text-[1.4rem] md:text-[1.7rem]">{title}</h2>
+              <p className="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground sm:leading-6">{description}</p>
             </div>
           </div>
         </div>
       </div>
-      <div className="p-5 md:p-6">{children}</div>
-      <div className="border-t border-border/60 p-5 md:p-6">{footer}</div>
+      <div className="p-4 sm:p-5 md:p-6">{children}</div>
+      <div className="border-t border-border/60 p-4 sm:p-5 md:p-6">{footer}</div>
     </section>
   );
 }
@@ -736,7 +736,7 @@ function HeroMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="surface-panel p-4">
       <div className="metric-label">{label}</div>
-      <div className="mt-2 text-sm font-semibold leading-6 text-slate-900">{value}</div>
+      <div className="mt-2 text-sm font-semibold leading-5 text-slate-900 sm:leading-6">{value}</div>
     </div>
   );
 }
