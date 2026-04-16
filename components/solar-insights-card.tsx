@@ -26,6 +26,7 @@ interface SolarInsightsCardProps {
   errorMessage: string | null;
   requestPoint: SolarLatLng | null;
   selectionMatch: SolarSelectionMatchSummary | null;
+  needsRefresh: boolean;
   onRefresh: () => void;
   quoteResult: QuoteScenarioResult;
 }
@@ -36,6 +37,7 @@ export function SolarInsightsCard({
   errorMessage,
   requestPoint,
   selectionMatch,
+  needsRefresh,
   onRefresh,
   quoteResult,
 }: SolarInsightsCardProps) {
@@ -63,7 +65,7 @@ export function SolarInsightsCard({
           </div>
           <Button onClick={onRefresh} size="sm" disabled={status === "loading" || !requestPoint}>
             {status === "loading" ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : <Sun data-icon="inline-start" />}
-            {status === "loading" ? copy.solar.loading : copy.solar.refresh}
+            {status === "loading" ? copy.solar.loading : insights ? copy.solar.refresh : copy.solar.analyze}
           </Button>
         </div>
       </CardHeader>
@@ -77,6 +79,18 @@ export function SolarInsightsCard({
             {copy.solar.noPoint}
           </div>
         )}
+
+        {requestPoint && !insights && !errorMessage && !needsRefresh && status !== "loading" ? (
+          <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+            {copy.solar.readyToAnalyze}
+          </div>
+        ) : null}
+
+        {needsRefresh ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {copy.solar.staleResult}
+          </div>
+        ) : null}
 
         {selectionMatch?.status === "outside-selection" ? (
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">

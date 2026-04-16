@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { startTransition, useEffect, useMemo, useState, type ReactNode } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, CircleDashed, MapPinned, type LucideIcon, Settings2, Sparkles, WalletCards } from "lucide-react";
 import { LocaleProvider, useAppCopy, useLocaleContext } from "@/components/locale-provider";
 import { Map } from "@/components/Map";
@@ -72,9 +72,9 @@ function DashboardShellContent() {
   const [exportRateTHBPerKWh, setExportRateTHBPerKWh] = useState<number>(SOLAR_DEFAULTS.defaultExportRateTHBPerKWh);
   const [mapCenter, setMapCenter] = useState<SolarLatLng | null>(null);
   const [solarInsights, setSolarInsights] = useState<GoogleSolarSummary | null>(null);
+  const [solarInsightsKey, setSolarInsightsKey] = useState<string | null>(null);
   const [solarStatus, setSolarStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [solarErrorMessage, setSolarErrorMessage] = useState<string | null>(null);
-  const lastAutoFetchKeyRef = useRef<string | null>(null);
 
   const step1Done = mapSelection.grossAreaM2 > 0;
   const step2Done = step1Done && systemReviewed;
@@ -96,13 +96,16 @@ function DashboardShellContent() {
     ? `${solarRequestPoint.latitude.toFixed(6)}:${solarRequestPoint.longitude.toFixed(6)}`
     : null;
 
+  const activeSolarInsights = solarInsightsKey && solarRequestKey && solarInsightsKey === solarRequestKey ? solarInsights : null;
+  const solarNeedsRefresh = Boolean(solarRequestKey && solarInsightsKey && solarInsightsKey !== solarRequestKey);
+
   const solarSelectionMatch = useMemo(
-    () => buildSolarSelectionMatchSummary(mapSelection.shapes, solarInsights?.center),
-    [mapSelection.shapes, solarInsights?.center],
+    () => buildSolarSelectionMatchSummary(mapSelection.shapes, activeSolarInsights?.center),
+    [activeSolarInsights?.center, mapSelection.shapes],
   );
 
   const result = useMemo(() => {
-    const googleSellableFit = getGoogleSolarSellableFit(solarInsights);
+    const googleSellableFit = getGoogleSolarSellableFit(activeSolarInsights);
 
     return calculateQuoteScenario({
       map: mapSelection,
@@ -123,7 +126,7 @@ function DashboardShellContent() {
     pricingPresetId,
     selectedFinanceIds,
     selfConsumptionRatio,
-    solarInsights,
+    activeSolarInsights,
     solarSelectionMatch.status,
     topology,
   ]);
@@ -233,17 +236,19 @@ function DashboardShellContent() {
           ? copy.workflow.nextActionValidation
           : copy.workflow.nextActionProposal;
 
-  const fetchSolarData = async (requestPoint: SolarLatLng) => {
+  const fetchSolarData = async (requestPoint: SolarLatLng, requestKey: string) => {
     setSolarStatus("loading");
     setSolarErrorMessage(null);
 
     try {
       const payload = await requestSolarInsights(requestPoint);
       setSolarInsights(payload);
+      setSolarInsightsKey(requestKey);
       setSolarStatus("success");
       setValidationReviewed(true);
     } catch (error) {
       setSolarInsights(null);
+      setSolarInsightsKey(null);
       setSolarStatus("error");
       setSolarErrorMessage(error instanceof Error ? error.message : "Unknown Google Solar error.");
     }
@@ -252,28 +257,15 @@ function DashboardShellContent() {
   useEffect(() => {
     if (!solarRequestKey || !solarRequestPoint) {
       setSolarInsights(null);
+      setSolarInsightsKey(null);
       setSolarStatus("idle");
       setSolarErrorMessage(null);
-      lastAutoFetchKeyRef.current = null;
       return;
     }
-
-    if (lastAutoFetchKeyRef.current === solarRequestKey) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      void (async () => {
-        await fetchSolarData(solarRequestPoint);
-        lastAutoFetchKeyRef.current = solarRequestKey;
-      })();
-    }, 600);
-
-    return () => window.clearTimeout(timeout);
   }, [solarRequestKey, solarRequestPoint]);
 
   const activeChecklist = useMemo(() => {
-    const hasSolarValidation = solarInsights !== null || mapCenter !== null || mapSelection.grossAreaM2 > 0;
+    const hasSolarValidation = activeSolarInsights !== null || mapCenter !== null || mapSelection.grossAreaM2 > 0;
 
     return {
       1: [
@@ -321,7 +313,7 @@ function DashboardShellContent() {
     result.suggestedSellPriceTHB,
     result.systemSizeWp,
     selectedFinanceIds.length,
-    solarInsights,
+    activeSolarInsights,
     systemReviewed,
     validationReviewed,
   ])[activeStep];
@@ -486,7 +478,7 @@ function DashboardShellContent() {
                   value={mapSelection}
                   onChange={handleMapSelectionChange}
                   onCenterChange={setMapCenter}
-                  solarInsights={solarInsights}
+                  solarInsights={activeSolarInsights}
                   solarSelectionMatch={solarSelectionMatch}
                 />
 
@@ -639,16 +631,17 @@ function DashboardShellContent() {
                 </div>
 
                 <SolarInsightsCard
-                  insights={solarInsights}
+                  insights={activeSolarInsights}
                   status={solarStatus}
                   errorMessage={solarErrorMessage}
                   requestPoint={solarRequestPoint}
                   selectionMatch={solarSelectionMatch}
+                  needsRefresh={solarNeedsRefresh}
                   onRefresh={() => {
-                    if (!solarRequestPoint) {
+                    if (!solarRequestPoint || !solarRequestKey) {
                       return;
                     }
-                    void fetchSolarData(solarRequestPoint);
+                    void fetchSolarData(solarRequestPoint, solarRequestKey);
                   }}
                   quoteResult={result}
                 />
@@ -682,7 +675,7 @@ function DashboardShellContent() {
                 />
                 <QuoteResults
                   result={result}
-                  solarInsights={solarInsights}
+                  solarInsights={activeSolarInsights}
                   topologySummary={topologySummary}
                   pricingPresetLabel={pricingMeta.label}
                   financeSelectionCount={selectedFinanceIds.length}
