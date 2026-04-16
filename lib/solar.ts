@@ -293,16 +293,34 @@ export function getGoogleSolarSellableFit(
   };
 }
 
+export function getGoogleSolarSellableAnnualGeneration(
+  insights?: GoogleSolarSummary | null,
+): number | null {
+  if (!insights?.recommendedConfig || insights.recommendedConfig.yearlyEnergyDcKwh <= 0) {
+    return null;
+  }
+
+  const googleRawKw = getGoogleSolarRecommendedKw(insights);
+  const sellableFit = getGoogleSolarSellableFit(insights);
+  const targetKw = sellableFit.equivalentKw;
+
+  if (!googleRawKw || !targetKw || googleRawKw <= 0 || targetKw <= 0) {
+    return null;
+  }
+
+  return insights.recommendedConfig.yearlyEnergyDcKwh * (targetKw / googleRawKw);
+}
+
 export function buildSolarCrossCheckSummary(
   insights: GoogleSolarSummary,
-  manualSystemWp: number,
+  roofFitSystemWp: number,
 ): SolarCrossCheckSummary {
   const googleRawKw = getGoogleSolarRecommendedKw(insights);
   const sellableFit = getGoogleSolarSellableFit(insights);
   const normalizedEquivalent = getGoogleSolarNormalizedEquivalent(insights);
   const googleRecommendedKw =
     sellableFit.equivalentKw ?? normalizedEquivalent.equivalentKw ?? googleRawKw;
-  const manualKw = manualSystemWp / 1000;
+  const manualKw = roofFitSystemWp / 1000;
   const deltaKw =
     googleRecommendedKw === null ? null : googleRecommendedKw - manualKw;
 
@@ -319,10 +337,10 @@ export function buildSolarCrossCheckSummary(
     status === "no-layout"
       ? "Google Solar found roof-level potential, but not a concrete panel layout recommendation for this point."
       : status === "aligned"
-        ? "Google Solar and the current KSolar quote are broadly aligned. This is a good confidence check before presenting pricing."
+        ? "Google Solar and the current KSolar roof-fit estimate are broadly aligned. This is a good confidence check before selecting the formal package."
         : status === "check-under-sizing"
-          ? "Google Solar suggests the roof may support more capacity than the current quote. Review whether the roof drawing or setbacks are too conservative."
-          : "Google Solar suggests a smaller package than the current quote. Review roof selection, obstruction assumptions, and usable-area rules before finalizing.";
+          ? "Google Solar suggests the roof may support more capacity than the current KSolar roof-fit estimate. Review whether the roof drawing or setbacks are too conservative."
+          : "Google Solar suggests a smaller roof-fit than KSolar. Review roof selection, obstruction assumptions, and usable-area rules before finalizing.";
 
   const confidenceSummary =
     insights.imageryQuality === "HIGH"

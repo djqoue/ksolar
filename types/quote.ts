@@ -48,6 +48,7 @@ export interface QuoteScenarioInput {
   googleMatchedRoof?: boolean;
   googleSellableFitWp?: number | null;
   googleSellablePanelCount?: number | null;
+  googleAnnualGenerationKWh?: number | null;
 }
 
 export interface QuoteScenarioResult {
@@ -58,6 +59,7 @@ export interface QuoteScenarioResult {
   panelCount: number;
   roofFitPanelCount: number;
   roofFitSystemWp: number;
+  roofPotentialAnnualGenerationKWh: number;
   quotedSystemSizeWp: number;
   systemSizeWp: number;
   annualGenerationKWh: number;

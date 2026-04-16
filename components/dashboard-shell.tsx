@@ -18,7 +18,12 @@ import { DEFAULT_TOPOLOGY, SOLAR_DEFAULTS } from "@/lib/config/solar";
 import { getLocalizedPresetMeta, LANGUAGE_OPTIONS, type AppLocale } from "@/lib/i18n";
 import { createEmptyMapSelection } from "@/lib/maps";
 import { requestSolarInsights } from "@/lib/solar-client";
-import { buildSolarSelectionMatchSummary, getGoogleSolarSellableFit, getSelectionReferencePoint } from "@/lib/solar";
+import {
+  buildSolarSelectionMatchSummary,
+  getGoogleSolarSellableAnnualGeneration,
+  getGoogleSolarSellableFit,
+  getSelectionReferencePoint,
+} from "@/lib/solar";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import type { MapSelectionSummary, PricingPreset } from "@/types/quote";
 import type { SystemTopology } from "@/types/bom";
@@ -107,6 +112,7 @@ function DashboardShellContent() {
 
   const result = useMemo(() => {
     const googleSellableFit = getGoogleSolarSellableFit(activeSolarInsights);
+    const googleSellableAnnualGeneration = getGoogleSolarSellableAnnualGeneration(activeSolarInsights);
 
     return calculateQuoteScenario({
       map: mapSelection,
@@ -119,6 +125,7 @@ function DashboardShellContent() {
       googleMatchedRoof: solarSelectionMatch.status === "inside-selection",
       googleSellableFitWp: googleSellableFit.equivalentKw ? googleSellableFit.equivalentKw * 1000 : null,
       googleSellablePanelCount: googleSellableFit.equivalentPanelCount,
+      googleAnnualGenerationKWh: googleSellableAnnualGeneration,
     });
   }, [
     exportRateTHBPerKWh,
@@ -227,10 +234,36 @@ function DashboardShellContent() {
       value: mapSelection.usableAreaM2 > 0 ? `${formatNumber(mapSelection.usableAreaM2, 1)} m²` : "N/A",
     },
     {
-      label: copy.workflow.size,
-      value: result.systemSizeWp > 0 ? `${formatNumber(result.systemSizeWp / 1000, 2)} kWp` : "N/A",
+      label: copy.quote.roofFitSize,
+      value: result.roofFitSystemWp > 0 ? `${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp` : "N/A",
+    },
+    {
+      label: copy.quote.roofPotentialGeneration,
+      value:
+        result.roofPotentialAnnualGenerationKWh > 0
+          ? `${formatNumber(result.roofPotentialAnnualGenerationKWh)} kWh`
+          : "N/A",
     },
   ];
+
+  const headlineSizeLabel = activeStep === 4 ? copy.quote.quotedPackageSize : copy.quote.roofFitSize;
+  const headlineSizeValue =
+    activeStep === 4
+      ? result.quotedSystemSizeWp > 0
+        ? `${formatNumber(result.quotedSystemSizeWp / 1000, 2)} kWp`
+        : "N/A"
+      : result.roofFitSystemWp > 0
+        ? `${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp`
+        : "N/A";
+  const headlineOutcomeLabel = activeStep === 4 ? copy.workflow.netPrice : copy.quote.roofPotentialGeneration;
+  const headlineOutcomeValue =
+    activeStep === 4
+      ? result.finance.financeAdjustedPriceTHB
+        ? formatCurrency(result.finance.financeAdjustedPriceTHB)
+        : "N/A"
+      : result.roofPotentialAnnualGenerationKWh > 0
+        ? `${formatNumber(result.roofPotentialAnnualGenerationKWh)} kWh`
+        : "N/A";
 
   const nextAction =
     activeStep === 1
@@ -289,7 +322,7 @@ function DashboardShellContent() {
         { label: copy.workflow.step3Check3, done: hasSolarValidation },
       ],
       4: [
-        { label: copy.workflow.step4Check1, done: result.systemSizeWp > 0 && result.suggestedSellPriceTHB > 0 },
+        { label: copy.workflow.step4Check1, done: result.quotedSystemSizeWp > 0 && result.suggestedSellPriceTHB > 0 },
         { label: copy.workflow.step4Check2, done: result.paybackYears !== null && result.irrPercent !== null },
         { label: copy.workflow.step4Check3, done: Boolean(result.bom) },
       ],
@@ -316,7 +349,7 @@ function DashboardShellContent() {
     result.irrPercent,
     result.paybackYears,
     result.suggestedSellPriceTHB,
-    result.systemSizeWp,
+    result.quotedSystemSizeWp,
     selectedFinanceIds.length,
     activeSolarInsights,
     systemReviewed,
@@ -395,14 +428,8 @@ function DashboardShellContent() {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <HeroMetric label={copy.workflow.currentFocus} value={activeStepState.title} />
             <HeroMetric label={copy.workflow.nextAction} value={nextAction} />
-            <HeroMetric
-              label={copy.workflow.size}
-              value={result.systemSizeWp > 0 ? `${formatNumber(result.systemSizeWp / 1000, 2)} kWp` : "N/A"}
-            />
-            <HeroMetric
-              label={copy.workflow.netPrice}
-              value={result.finance.financeAdjustedPriceTHB ? formatCurrency(result.finance.financeAdjustedPriceTHB) : "N/A"}
-            />
+            <HeroMetric label={headlineSizeLabel} value={headlineSizeValue} />
+            <HeroMetric label={headlineOutcomeLabel} value={headlineOutcomeValue} />
           </div>
         </div>
       </section>

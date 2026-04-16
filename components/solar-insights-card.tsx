@@ -47,7 +47,7 @@ export function SolarInsightsCard({
   const copy = useAppCopy();
   const { locale } = useLocaleContext();
   const crossCheckSummary = insights
-    ? buildSolarCrossCheckSummary(insights, quoteResult.systemSizeWp)
+    ? buildSolarCrossCheckSummary(insights, quoteResult.roofFitSystemWp)
     : null;
   const recommendedAction =
     !crossCheckSummary ||

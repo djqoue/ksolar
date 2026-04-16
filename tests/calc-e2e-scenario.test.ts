@@ -21,6 +21,7 @@ describe("calculateQuoteScenario", () => {
     expect(result.isViable).toBe(true);
     expect(result.recommendedTier?.id).toBe("10kW");
     expect(result.roofFitSystemWp).toBe(17550);
+    expect(result.roofPotentialAnnualGenerationKWh).toBeGreaterThan(result.annualGenerationKWh);
     expect(result.quotedSystemSizeWp).toBe(10400);
     expect(result.bom?.hardwareCostTHB).toBe(74436);
     expect(result.annualGenerationKWh).toBeGreaterThan(12000);
@@ -69,6 +70,7 @@ describe("calculateQuoteScenario", () => {
     expect(result.isViable).toBe(true);
     expect(result.recommendedTier?.id).toBe("5kW");
     expect(result.roofFitSystemWp).toBe(5200);
+    expect(result.roofPotentialAnnualGenerationKWh).toBe(result.annualGenerationKWh);
     expect(result.quotedSystemSizeWp).toBe(5200);
     expect(result.systemSizeWp).toBe(5200);
     expect(result.panelCount).toBe(8);

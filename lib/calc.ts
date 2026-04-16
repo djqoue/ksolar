@@ -24,6 +24,11 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
     input.googleMatchedRoof && input.googleSellableFitWp !== null && input.googleSellableFitWp !== undefined
       ? input.googleSellableFitWp
       : roofFitPanelCount * SOLAR_DEFAULTS.panelPowerWp;
+  const roofPotentialGeneration = calculateGeneration(roofFitSystemWp);
+  const roofPotentialAnnualGenerationKWh =
+    input.googleMatchedRoof && input.googleAnnualGenerationKWh !== null && input.googleAnnualGenerationKWh !== undefined
+      ? input.googleAnnualGenerationKWh
+      : roofPotentialGeneration.annualGenerationKWh;
   const tierRecommendation = recommendCapacityTier(input.topology.phase, roofFitPanelCount);
   const warnings = [...tierRecommendation.warnings];
 
@@ -40,6 +45,7 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
       panelCount: roofFitPanelCount,
       roofFitPanelCount,
       roofFitSystemWp,
+      roofPotentialAnnualGenerationKWh,
       quotedSystemSizeWp: 0,
       systemSizeWp: roofFitSystemWp || roof.theoreticalWp,
       annualGenerationKWh: 0,
@@ -82,6 +88,7 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
       panelCount: roofFitPanelCount,
       roofFitPanelCount,
       roofFitSystemWp,
+      roofPotentialAnnualGenerationKWh,
       quotedSystemSizeWp: tierRecommendation.tier.nominalWp,
       systemSizeWp: roofFitSystemWp,
       annualGenerationKWh: generation.annualGenerationKWh,
@@ -122,6 +129,7 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
     panelCount: roofFitPanelCount,
     roofFitPanelCount,
     roofFitSystemWp,
+    roofPotentialAnnualGenerationKWh,
     quotedSystemSizeWp: tierRecommendation.tier.nominalWp,
     systemSizeWp: roofFitSystemWp,
     annualGenerationKWh: generation.annualGenerationKWh,
@@ -139,6 +147,7 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
       usableAreaM2: roof.usableAreaM2,
       panelCount: roofFitPanelCount,
       systemSizeWp: roofFitSystemWp,
+      roofPotentialAnnualGenerationKWh,
       quotedSystemSizeWp: tierRecommendation.tier.nominalWp,
       annualGenerationKWh: generation.annualGenerationKWh,
       annualSavingsTHB: tariff.annualSavingsTHB,

@@ -35,7 +35,7 @@ export function QuoteResults({
   const copy = useAppCopy();
   const { locale } = useLocaleContext();
   const solarCrossCheck = solarInsights
-    ? buildSolarCrossCheckSummary(solarInsights, result.systemSizeWp)
+    ? buildSolarCrossCheckSummary(solarInsights, result.roofFitSystemWp)
     : null;
 
   return (
@@ -65,17 +65,21 @@ export function QuoteResults({
         <CardContent className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
           <div className="grid gap-4">
             <div className="rounded-[1.1rem] border border-border bg-white p-5">
-              <div className="metric-label">{copy.quote.roofFitSize}</div>
+              <div className="metric-label">{copy.quote.quotedPackageSize}</div>
               <div className="mt-2 text-[2.1rem] font-semibold tracking-tight text-slate-950 md:text-[2.6rem]">
-                {result.systemSizeWp > 0 ? `${formatNumber(result.systemSizeWp / 1000, 2)} kWp` : "N/A"}
+                {result.quotedSystemSizeWp > 0 ? `${formatNumber(result.quotedSystemSizeWp / 1000, 2)} kWp` : "N/A"}
               </div>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">{topologySummary}</p>
-              {result.quotedSystemSizeWp > 0 ? (
+              {result.roofFitSystemWp > 0 ? (
                 <p className="mt-2 text-sm leading-6 text-slate-700">
-                  {copy.quote.quotedPackageSize}: <span className="font-semibold">{formatNumber(result.quotedSystemSizeWp / 1000, 2)} kWp</span>
-                  {result.recommendedTier ? <span className="text-muted-foreground"> · {result.recommendedTier.id}</span> : null}
+                  {copy.quote.roofFitSize}: <span className="font-semibold">{formatNumber(result.roofFitSystemWp / 1000, 2)} kWp</span>
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    {copy.quote.roofPotentialGeneration}: {formatNumber(result.roofPotentialAnnualGenerationKWh)} kWh
+                  </span>
                 </p>
               ) : null}
+              {result.recommendedTier ? <p className="mt-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">{result.recommendedTier.id}</p> : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-[1rem] border border-border bg-white p-4">
@@ -115,7 +119,7 @@ export function QuoteResults({
             </div>
             <div className="rounded-[1.1rem] border border-border bg-muted/20 p-5 text-sm leading-6 text-slate-700">
               {result.recommendedTier
-                ? `${copy.quote.quotedPackageSize}: ${result.recommendedTier.id} ${topologySummary}. ${copy.quote.quoteSummaryDescription}`
+                ? `${copy.quote.quotedPackageSize}: ${result.recommendedTier.id} ${topologySummary}. ${copy.quote.roofFitSize}: ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp.`
                 : copy.workflow.noProposal}
             </div>
           </div>
@@ -143,7 +147,7 @@ export function QuoteResults({
             </div>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl border border-white/50 bg-white/80 p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.solar.manualQuote}</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.solar.roofFitEstimate}</div>
                 <div className="mt-2 text-2xl font-semibold">
                   {solarCrossCheck ? `${formatNumber(solarCrossCheck.manualKw, 2)} kWp` : "N/A"}
                 </div>
@@ -208,9 +212,10 @@ export function QuoteResults({
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryMetric label={copy.quote.roofFitSize} value={`${formatNumber(result.systemSizeWp / 1000, 2)} kWp`} />
+            <SummaryMetric label={copy.quote.roofFitSize} value={`${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp`} />
+            <SummaryMetric label={copy.quote.roofPotentialGeneration} value={`${formatNumber(result.roofPotentialAnnualGenerationKWh)} kWh`} />
             <SummaryMetric label={copy.quote.quotedPackageSize} value={`${formatNumber(result.quotedSystemSizeWp / 1000, 2)} kWp`} />
-            <SummaryMetric label={copy.quote.annualGeneration} value={`${formatNumber(result.annualGenerationKWh)} kWh`} />
+            <SummaryMetric label={copy.quote.quotedAnnualGeneration} value={`${formatNumber(result.annualGenerationKWh)} kWh`} />
             <SummaryMetric label={copy.quote.sellPrice} value={formatCurrency(result.suggestedSellPriceTHB)} />
             <SummaryMetric label={copy.quote.netCustomerPrice} value={formatCurrency(result.finance.financeAdjustedPriceTHB)} />
           </div>

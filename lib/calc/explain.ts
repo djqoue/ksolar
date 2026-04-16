@@ -8,6 +8,7 @@ export function buildCalculationExplanation(input: {
   usableAreaM2: number;
   panelCount: number;
   systemSizeWp: number;
+  roofPotentialAnnualGenerationKWh: number;
   quotedSystemSizeWp: number;
   annualGenerationKWh: number;
   annualSavingsTHB: number;
@@ -24,21 +25,24 @@ export function buildCalculationExplanation(input: {
     {
       key: "roof",
       title: "Roof-to-capacity logic",
-      description: "Map area is derated first, then converted into standard panel count and conservative package size.",
+      description:
+        "Map area is derated first, then converted into roof-fit potential. The formal package is selected later from phase rules and BOM limits.",
       metrics: {
         "Gross area (m²)": formatNumber(input.grossAreaM2, 1),
         "Usable area (m²)": formatNumber(input.usableAreaM2, 1),
         "Supported panels": input.panelCount,
-        "System size": `${formatNumber(input.systemSizeWp / 1000, 2)} kWp`,
+        "Roof-fit size": `${formatNumber(input.systemSizeWp / 1000, 2)} kWp`,
+        "Roof-potential generation": `${formatNumber(input.roofPotentialAnnualGenerationKWh)} kWh`,
         "Quoted package size": `${formatNumber(input.quotedSystemSizeWp / 1000, 2)} kWp`,
       },
     },
     {
       key: "generation",
       title: "Generation and tariff logic",
-      description: "Annual energy is driven by 4.0 sun-hours, 15% system loss, and net-billing savings from self-use plus export.",
+      description:
+        "Roof potential is an engineering estimate. Formal annual energy and savings are based on the quoted package after phase and topology are confirmed.",
       metrics: {
-        "Annual generation": `${formatNumber(input.annualGenerationKWh)} kWh`,
+        "Quoted annual generation": `${formatNumber(input.annualGenerationKWh)} kWh`,
         "Retail rate": `${formatNumber(input.retailRateTHBPerKWh, 2)} THB/kWh`,
         "Self-use ratio": formatPercent(input.selfConsumptionRatio * 100),
         "Export rate": `${formatNumber(input.exportRateTHBPerKWh, 2)} THB/kWh`,
