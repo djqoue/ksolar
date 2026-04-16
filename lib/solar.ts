@@ -99,6 +99,7 @@ function getShapeCentroid(shape: RoofShape): SolarLatLng | null {
 
 export type SolarSelectionMatchStatus =
   | "inside-selection"
+  | "partial-selection"
   | "outside-selection"
   | "manual-only"
   | "unavailable";
@@ -107,17 +108,25 @@ export interface SolarSelectionMatchSummary {
   status: SolarSelectionMatchStatus;
   distanceToNearestShapeMeters: number | null;
   isInsideSelection: boolean | null;
+  overlapRatio: number | null;
+  matchedPoints: number;
+  totalPoints: number;
 }
 
 export function buildSolarSelectionMatchSummary(
   shapes: RoofShape[],
-  buildingCenter?: SolarLatLng | null,
+  solarSummary?: GoogleSolarSummary | null,
 ): SolarSelectionMatchSummary {
+  const buildingCenter = solarSummary?.center;
+
   if (!buildingCenter) {
     return {
       status: "unavailable",
       distanceToNearestShapeMeters: null,
       isInsideSelection: null,
+      overlapRatio: null,
+      matchedPoints: 0,
+      totalPoints: 0,
     };
   }
 
@@ -127,12 +136,30 @@ export function buildSolarSelectionMatchSummary(
       status: "manual-only",
       distanceToNearestShapeMeters: null,
       isInsideSelection: null,
+      overlapRatio: null,
+      matchedPoints: 0,
+      totalPoints: 0,
     };
   }
 
-  const isInsideSelection = geospatialShapes.some((shape) =>
-    isPointInsidePath(buildingCenter, shape.path),
-  );
+  const selectionContainsPoint = (point: SolarLatLng) =>
+    geospatialShapes.some((shape) =>
+      isPointInsidePath(point, shape.path),
+    );
+
+  const samplePoints =
+    solarSummary?.solarPanels.length
+      ? solarSummary.solarPanels.map((panel) => panel.center)
+      : solarSummary?.roofSegments.length
+        ? solarSummary.roofSegments
+            .map((segment) => segment.center)
+            .filter((center): center is SolarLatLng => Boolean(center))
+        : [buildingCenter];
+
+  const matchedPoints = samplePoints.filter((point) => selectionContainsPoint(point)).length;
+  const totalPoints = samplePoints.length;
+  const overlapRatio = totalPoints > 0 ? matchedPoints / totalPoints : null;
+  const isInsideSelection = selectionContainsPoint(buildingCenter);
 
   const centroidDistances = geospatialShapes
     .map((shape) => getShapeCentroid(shape))
@@ -142,10 +169,25 @@ export function buildSolarSelectionMatchSummary(
   const distanceToNearestShapeMeters =
     centroidDistances.length > 0 ? Math.min(...centroidDistances) : null;
 
+  let status: SolarSelectionMatchStatus = "outside-selection";
+
+  if (overlapRatio !== null) {
+    if (overlapRatio >= 0.8) {
+      status = "inside-selection";
+    } else if (overlapRatio >= 0.2 || isInsideSelection) {
+      status = "partial-selection";
+    }
+  } else if (isInsideSelection) {
+    status = "inside-selection";
+  }
+
   return {
-    status: isInsideSelection ? "inside-selection" : "outside-selection",
+    status,
     distanceToNearestShapeMeters,
     isInsideSelection,
+    overlapRatio,
+    matchedPoints,
+    totalPoints,
   };
 }
 

@@ -114,6 +114,17 @@ export function SolarInsightsCard({
           </div>
         ) : null}
 
+        {selectionMatch?.status === "partial-selection" ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="font-medium">{copy.solar.mapOverlayPartial}</div>
+            {selectionMatch.overlapRatio !== null ? (
+              <div className="mt-1 text-amber-900/80">
+                {copy.solar.overlapInsideSelection}: {formatNumber(selectionMatch.overlapRatio * 100, 0)}%
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {selectionMatch?.status === "manual-only" ? (
           <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
             {copy.solar.mapOverlayManual}

@@ -623,10 +623,17 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
               </div>
             </div>
           ) : null}
-          {solarSelectionMatch?.status === "outside-selection" ? (
+          {solarSelectionMatch?.status === "outside-selection" || solarSelectionMatch?.status === "partial-selection" ? (
             <div className="absolute inset-x-3 bottom-32 z-10 rounded-xl border border-amber-300 bg-amber-50/95 px-4 py-3 text-sm text-amber-900 shadow-sm backdrop-blur sm:inset-x-4 sm:bottom-4 sm:left-auto sm:max-w-[360px]">
-              <div className="font-medium">{copy.solar.mapOverlayUnmatched}</div>
-              {solarSelectionMatch.distanceToNearestShapeMeters !== null ? (
+              <div className="font-medium">
+                {solarSelectionMatch.status === "partial-selection" ? copy.solar.mapOverlayPartial : copy.solar.mapOverlayUnmatched}
+              </div>
+              {solarSelectionMatch.status === "partial-selection" && solarSelectionMatch.overlapRatio !== null ? (
+                <div className="mt-1 text-xs text-amber-900/80">
+                  {copy.solar.overlapInsideSelection}: {formatNumber(solarSelectionMatch.overlapRatio * 100, 0)}%
+                </div>
+              ) : null}
+              {solarSelectionMatch.status === "outside-selection" && solarSelectionMatch.distanceToNearestShapeMeters !== null ? (
                 <div className="mt-1 text-xs text-amber-900/80">
                   {copy.solar.distanceFromSelection}: {formatNumber(solarSelectionMatch.distanceToNearestShapeMeters, 1)} m
                 </div>
@@ -659,7 +666,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
                   options={{
                     clickable: false,
                     fillOpacity: 0,
-                    strokeColor: solarSelectionMatch?.status === "outside-selection" ? "#f59e0b" : "#14b8a6",
+                    strokeColor: solarSelectionMatch?.status === "inside-selection" ? "#14b8a6" : "#f59e0b",
                     strokeOpacity: 0.85,
                     strokeWeight: 2,
                     zIndex: 2,
@@ -707,7 +714,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
                   radius={2.4}
                   options={{
                     clickable: false,
-                    fillColor: solarSelectionMatch?.status === "outside-selection" ? "#f59e0b" : "#111827",
+                    fillColor: solarSelectionMatch?.status === "inside-selection" ? "#111827" : "#f59e0b",
                     fillOpacity: 0.9,
                     strokeColor: "#ffffff",
                     strokeOpacity: 0.9,

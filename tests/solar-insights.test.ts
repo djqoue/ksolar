@@ -29,6 +29,7 @@ const baseSummary: GoogleSolarSummary = {
     roofSegmentCount: 2,
   },
   roofSegments: [],
+  solarPanels: [],
 };
 
 describe("google solar helpers", () => {
@@ -86,11 +87,51 @@ describe("google solar helpers", () => {
           ],
         },
       ],
-      baseSummary.center,
+      {
+        ...baseSummary,
+        solarPanels: [
+          { center: { latitude: 13.7562, longitude: 100.5017 }, orientation: "PORTRAIT", segmentIndex: 0, yearlyEnergyDcKwh: 100 },
+          { center: { latitude: 13.7563, longitude: 100.5018 }, orientation: "PORTRAIT", segmentIndex: 0, yearlyEnergyDcKwh: 100 },
+          { center: { latitude: 13.7564, longitude: 100.5019 }, orientation: "PORTRAIT", segmentIndex: 0, yearlyEnergyDcKwh: 100 },
+        ],
+      },
     );
 
     expect(match.status).toBe("inside-selection");
     expect(match.isInsideSelection).toBe(true);
+    expect(match.overlapRatio).toBe(1);
+  });
+
+  it("marks Google Solar as partial when only part of the panel layout overlaps the selected roof", () => {
+    const match = buildSolarSelectionMatchSummary(
+      [
+        {
+          id: "roof-1",
+          kind: "polygon",
+          areaM2: 40,
+          path: [
+            { lat: 13.7560, lng: 100.5015 },
+            { lat: 13.7560, lng: 100.5021 },
+            { lat: 13.7566, lng: 100.5021 },
+            { lat: 13.7566, lng: 100.5015 },
+          ],
+        },
+      ],
+      {
+        ...baseSummary,
+        solarPanels: [
+          { center: { latitude: 13.7562, longitude: 100.5017 }, orientation: "PORTRAIT", segmentIndex: 0, yearlyEnergyDcKwh: 100 },
+          { center: { latitude: 13.7563, longitude: 100.5018 }, orientation: "PORTRAIT", segmentIndex: 0, yearlyEnergyDcKwh: 100 },
+          { center: { latitude: 13.7568, longitude: 100.5024 }, orientation: "PORTRAIT", segmentIndex: 0, yearlyEnergyDcKwh: 100 },
+          { center: { latitude: 13.7569, longitude: 100.5025 }, orientation: "PORTRAIT", segmentIndex: 0, yearlyEnergyDcKwh: 100 },
+        ],
+      },
+    );
+
+    expect(match.status).toBe("partial-selection");
+    expect(match.overlapRatio).toBe(0.5);
+    expect(match.matchedPoints).toBe(2);
+    expect(match.totalPoints).toBe(4);
   });
 
   it("marks Google Solar as outside the selected roof when the nearest building is elsewhere", () => {
@@ -108,7 +149,13 @@ describe("google solar helpers", () => {
           ],
         },
       ],
-      baseSummary.center,
+      {
+        ...baseSummary,
+        solarPanels: [
+          { center: { latitude: 13.7562, longitude: 100.5017 }, orientation: "PORTRAIT", segmentIndex: 0, yearlyEnergyDcKwh: 100 },
+          { center: { latitude: 13.7563, longitude: 100.5018 }, orientation: "PORTRAIT", segmentIndex: 0, yearlyEnergyDcKwh: 100 },
+        ],
+      },
     );
 
     expect(match.status).toBe("outside-selection");

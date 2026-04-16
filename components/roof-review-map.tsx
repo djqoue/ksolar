@@ -158,6 +158,20 @@ export function RoofReviewMap({
           </div>
         ) : null}
 
+        {selectionMatch?.status === "partial-selection" ? (
+          <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+            <div>
+              <div className="font-medium">{copy.solar.reviewMapPartial}</div>
+              {selectionMatch.overlapRatio !== null ? (
+                <div className="mt-1 text-amber-900/80">
+                  {copy.solar.overlapInsideSelection}: {formatNumber(selectionMatch.overlapRatio * 100, 0)}%
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         {selectionMatch?.status === "outside-selection" ? (
           <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" />
@@ -228,7 +242,10 @@ export function RoofReviewMap({
                   options={{
                     clickable: false,
                     fillOpacity: 0,
-                    strokeColor: selectionMatch?.status === "outside-selection" ? "#f59e0b" : "#14b8a6",
+                    strokeColor:
+                      selectionMatch?.status === "inside-selection"
+                        ? "#14b8a6"
+                        : "#f59e0b",
                     strokeOpacity: 0.9,
                     strokeWeight: 2,
                     zIndex: 2,
@@ -276,7 +293,10 @@ export function RoofReviewMap({
                   radius={2.5}
                   options={{
                     clickable: false,
-                    fillColor: selectionMatch?.status === "outside-selection" ? "#f59e0b" : "#111827",
+                    fillColor:
+                      selectionMatch?.status === "inside-selection"
+                        ? "#111827"
+                        : "#f59e0b",
                     fillOpacity: 0.9,
                     strokeColor: "#ffffff",
                     strokeOpacity: 0.9,

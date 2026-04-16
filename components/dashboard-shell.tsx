@@ -101,8 +101,8 @@ function DashboardShellContent() {
   const solarNeedsRefresh = Boolean(solarRequestKey && solarInsightsKey && solarInsightsKey !== solarRequestKey);
 
   const solarSelectionMatch = useMemo(
-    () => buildSolarSelectionMatchSummary(mapSelection.shapes, activeSolarInsights?.center),
-    [activeSolarInsights?.center, mapSelection.shapes],
+    () => buildSolarSelectionMatchSummary(mapSelection.shapes, activeSolarInsights),
+    [activeSolarInsights, mapSelection.shapes],
   );
 
   const result = useMemo(() => {
