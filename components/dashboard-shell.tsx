@@ -578,87 +578,88 @@ function DashboardShellContent() {
                 </div>
               }
             >
-              <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-                <div className="grid gap-4">
-                  <StepChecklistPanel
-                    title={copy.workflow.doneWhen}
-                    readyLabel={copy.workflow.checklistReady}
-                    pendingLabel={copy.workflow.checklistPending}
-                    items={activeChecklist}
-                  />
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>{copy.tariff.title}</CardTitle>
-                      <CardDescription>{copy.tariff.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-4">
-                      <div className="grid gap-2">
-                        <label className="text-sm font-medium">{copy.tariff.ftRate}</label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={ftRateTHBPerKWh}
-                          onChange={(event) => {
-                            setValidationReviewed(true);
-                            setFtRateTHBPerKWh(Number(event.target.value));
-                          }}
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <label className="text-sm font-medium">{copy.tariff.selfUseRatio}</label>
-                        <Input
-                          type="number"
-                          step="0.05"
-                          min="0"
-                          max="1"
-                          value={selfConsumptionRatio}
-                          onChange={(event) => {
-                            setValidationReviewed(true);
-                            setSelfConsumptionRatio(Number(event.target.value));
-                          }}
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <label className="text-sm font-medium">{copy.tariff.exportRate}</label>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          value={exportRateTHBPerKWh}
-                          onChange={(event) => {
-                            setValidationReviewed(true);
-                            setExportRateTHBPerKWh(Number(event.target.value));
-                          }}
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <FinanceSelector selectedFinanceIds={selectedFinanceIds} onChange={handleFinanceChange} />
-                </div>
-
-                <SolarInsightsCard
-                  insights={activeSolarInsights}
-                  status={solarStatus}
-                  errorMessage={solarErrorMessage}
-                  requestPoint={solarRequestPoint}
+              <div className="grid gap-4">
+                <RoofReviewMap
+                  selection={mapSelection}
+                  solarInsights={activeSolarInsights}
                   selectionMatch={solarSelectionMatch}
-                  needsRefresh={solarNeedsRefresh}
-                  reviewMap={
-                    <RoofReviewMap
-                      selection={mapSelection}
-                      solarInsights={activeSolarInsights}
-                      selectionMatch={solarSelectionMatch}
-                      fallbackCenter={solarRequestPoint}
-                      onEditRoof={() => setActiveStep(1)}
-                    />
-                  }
-                  onRefresh={() => {
-                    if (!solarRequestPoint || !solarRequestKey) {
-                      return;
-                    }
-                    void fetchSolarData(solarRequestPoint, solarRequestKey);
-                  }}
-                  quoteResult={result}
+                  fallbackCenter={solarRequestPoint}
+                  onEditRoof={() => setActiveStep(1)}
                 />
+
+                <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+                  <div className="grid gap-4">
+                    <StepChecklistPanel
+                      title={copy.workflow.doneWhen}
+                      readyLabel={copy.workflow.checklistReady}
+                      pendingLabel={copy.workflow.checklistPending}
+                      items={activeChecklist}
+                    />
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>{copy.tariff.title}</CardTitle>
+                        <CardDescription>{copy.tariff.description}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="grid gap-4">
+                        <div className="grid gap-2">
+                          <label className="text-sm font-medium">{copy.tariff.ftRate}</label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={ftRateTHBPerKWh}
+                            onChange={(event) => {
+                              setValidationReviewed(true);
+                              setFtRateTHBPerKWh(Number(event.target.value));
+                            }}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <label className="text-sm font-medium">{copy.tariff.selfUseRatio}</label>
+                          <Input
+                            type="number"
+                            step="0.05"
+                            min="0"
+                            max="1"
+                            value={selfConsumptionRatio}
+                            onChange={(event) => {
+                              setValidationReviewed(true);
+                              setSelfConsumptionRatio(Number(event.target.value));
+                            }}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <label className="text-sm font-medium">{copy.tariff.exportRate}</label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={exportRateTHBPerKWh}
+                            onChange={(event) => {
+                              setValidationReviewed(true);
+                              setExportRateTHBPerKWh(Number(event.target.value));
+                            }}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <FinanceSelector selectedFinanceIds={selectedFinanceIds} onChange={handleFinanceChange} />
+                  </div>
+
+                  <SolarInsightsCard
+                    insights={activeSolarInsights}
+                    status={solarStatus}
+                    errorMessage={solarErrorMessage}
+                    requestPoint={solarRequestPoint}
+                    selectionMatch={solarSelectionMatch}
+                    needsRefresh={solarNeedsRefresh}
+                    onRefresh={() => {
+                      if (!solarRequestPoint || !solarRequestKey) {
+                        return;
+                      }
+                      void fetchSolarData(solarRequestPoint, solarRequestKey);
+                    }}
+                    quoteResult={result}
+                  />
+                </div>
               </div>
             </StageFrame>
           ) : null}
