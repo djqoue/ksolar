@@ -23,11 +23,30 @@ const baseSummary: GoogleSolarSummary = {
   panelWidthMeters: 1,
   roofAreaMeters2: 58,
   roofGroundAreaMeters2: 56,
-  recommendedConfig: {
+  availableConfigs: [
+    {
+      index: 0,
+      panelsCount: 10,
+      yearlyEnergyDcKwh: 6200,
+      roofSegmentCount: 2,
+      roofSegmentSummaries: [],
+    },
+  ],
+  maxConfig: {
+    index: 0,
     panelsCount: 10,
     yearlyEnergyDcKwh: 6200,
     roofSegmentCount: 2,
+    roofSegmentSummaries: [],
   },
+  recommendedConfig: {
+    index: 0,
+    panelsCount: 10,
+    yearlyEnergyDcKwh: 6200,
+    roofSegmentCount: 2,
+    roofSegmentSummaries: [],
+  },
+  financialAnalyses: [],
   roofSegments: [],
   solarPanels: [],
 };
@@ -35,6 +54,44 @@ const baseSummary: GoogleSolarSummary = {
 describe("google solar helpers", () => {
   it("converts the recommended panel layout into kWp", () => {
     expect(getGoogleSolarRecommendedKw(baseSummary)).toBe(4);
+  });
+
+  it("prefers the max roof-fit config instead of the smallest Google config", () => {
+    expect(
+      getGoogleSolarRecommendedKw({
+        ...baseSummary,
+        availableConfigs: [
+          {
+            index: 0,
+            panelsCount: 4,
+            yearlyEnergyDcKwh: 2400,
+            roofSegmentCount: 1,
+            roofSegmentSummaries: [],
+          },
+          {
+            index: 1,
+            panelsCount: 18,
+            yearlyEnergyDcKwh: 11000,
+            roofSegmentCount: 2,
+            roofSegmentSummaries: [],
+          },
+        ],
+        recommendedConfig: {
+          index: 0,
+          panelsCount: 4,
+          yearlyEnergyDcKwh: 2400,
+          roofSegmentCount: 1,
+          roofSegmentSummaries: [],
+        },
+        maxConfig: {
+          index: 1,
+          panelsCount: 18,
+          yearlyEnergyDcKwh: 11000,
+          roofSegmentCount: 2,
+          roofSegmentSummaries: [],
+        },
+      }),
+    ).toBe(7.2);
   });
 
   it("normalizes Google panel layout into KSolar-equivalent capacity before comparison", () => {

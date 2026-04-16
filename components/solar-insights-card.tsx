@@ -19,7 +19,7 @@ import {
 } from "@/lib/i18n";
 import { formatNumber } from "@/lib/utils";
 import type { QuoteScenarioResult } from "@/types/quote";
-import type { GoogleSolarSummary, SolarLatLng } from "@/types/solar";
+import type { GoogleSolarDataLayerPaths, GoogleSolarSummary, SolarLatLng } from "@/types/solar";
 
 interface SolarInsightsCardProps {
   insights: GoogleSolarSummary | null;
@@ -31,6 +31,7 @@ interface SolarInsightsCardProps {
   reviewMap?: ReactNode;
   onRefresh: () => void;
   quoteResult: QuoteScenarioResult;
+  dataLayers?: GoogleSolarDataLayerPaths | null;
 }
 
 export function SolarInsightsCard({
@@ -43,9 +44,17 @@ export function SolarInsightsCard({
   reviewMap,
   onRefresh,
   quoteResult,
+  dataLayers,
 }: SolarInsightsCardProps) {
   const copy = useAppCopy();
   const { locale } = useLocaleContext();
+  const topLayout = insights?.maxConfig ?? insights?.recommendedConfig;
+  const billMatchedAnalysis =
+    insights?.billMatchedConfig
+      ? insights.financialAnalyses.find(
+          (analysis) => analysis.panelConfigIndex === insights.billMatchedConfig?.index,
+        )
+      : null;
   const crossCheckSummary = insights
     ? buildSolarCrossCheckSummary(insights, quoteResult.roofFitSystemWp)
     : null;
@@ -207,6 +216,14 @@ export function SolarInsightsCard({
               <MetricCard label={copy.solar.googlePanelWattage} value={insights.panelCapacityWatts ? `${formatNumber(insights.panelCapacityWatts)} W` : "N/A"} />
               <MetricCard label={copy.solar.roofModelArea} value={insights.roofAreaMeters2 ? `${formatNumber(insights.roofAreaMeters2, 1)} m²` : "N/A"} />
             </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <MetricCard
+                label={copy.solar.configSelection}
+                value={insights.configSelectionMethod === "financial-analysis" ? copy.solar.billMatchedConfig : copy.solar.maxLayout}
+              />
+              <MetricCard label={copy.solar.configCount} value={formatNumber(insights.availableConfigs.length)} />
+              <MetricCard label={copy.solar.dataLayersStatus} value={dataLayers ? copy.solar.dataLayersReady : copy.solar.dataLayersUnavailable} />
+            </div>
             <Accordion type="single" collapsible className="rounded-[1.1rem] border border-border/70 px-4">
               <AccordionItem value="solar-details" className="border-none">
                 <AccordionTrigger>{copy.solar.detailBreakdown}</AccordionTrigger>
@@ -221,21 +238,42 @@ export function SolarInsightsCard({
                       </div>
                     </div>
 
-                    {insights.recommendedConfig ? (
+                    {topLayout ? (
                       <div className="rounded-[1.1rem] border border-border/70 bg-muted/20 p-4">
                         <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
                           <Building2 className="size-4 text-primary" />
                           {copy.solar.topLayout}
                         </div>
                         <div className="grid gap-2 sm:grid-cols-4">
-                          <MetricCompact label={copy.solar.panels} value={formatNumber(insights.recommendedConfig.panelsCount)} />
-                          <MetricCompact label={copy.solar.energyDc} value={`${formatNumber(insights.recommendedConfig.yearlyEnergyDcKwh)} kWh/yr`} />
-                          <MetricCompact label={copy.solar.roofSegments} value={formatNumber(insights.recommendedConfig.roofSegmentCount)} />
+                          <MetricCompact label={copy.solar.panels} value={formatNumber(topLayout.panelsCount)} />
+                          <MetricCompact label={copy.solar.energyDc} value={`${formatNumber(topLayout.yearlyEnergyDcKwh)} kWh/yr`} />
+                          <MetricCompact label={copy.solar.roofSegments} value={formatNumber(topLayout.roofSegmentCount)} />
                           <MetricCompact
                             label={copy.solar.layoutArea}
                             value={
                               crossCheckSummary?.googleLayoutAreaM2 !== null && crossCheckSummary?.googleLayoutAreaM2 !== undefined
                                 ? `${formatNumber(crossCheckSummary.googleLayoutAreaM2, 1)} m²`
+                                : "N/A"
+                            }
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {insights.billMatchedConfig ? (
+                      <div className="rounded-[1.1rem] border border-border/70 bg-muted/20 p-4">
+                        <div className="mb-2 text-sm font-semibold">{copy.solar.billMatchedConfig}</div>
+                        <div className="grid gap-2 sm:grid-cols-4">
+                          <MetricCompact label={copy.solar.panels} value={formatNumber(insights.billMatchedConfig.panelsCount)} />
+                          <MetricCompact label={copy.solar.energyDc} value={`${formatNumber(insights.billMatchedConfig.yearlyEnergyDcKwh)} kWh/yr`} />
+                          <MetricCompact label={copy.solar.roofSegments} value={formatNumber(insights.billMatchedConfig.roofSegmentCount)} />
+                          <MetricCompact
+                            label={copy.solar.billReference}
+                            value={
+                              billMatchedAnalysis?.monthlyBillAmount !== null &&
+                              billMatchedAnalysis?.monthlyBillAmount !== undefined &&
+                              billMatchedAnalysis?.monthlyBillAmount !== null
+                                ? `${formatNumber(billMatchedAnalysis.monthlyBillAmount, 0)} ${billMatchedAnalysis.monthlyBillCurrencyCode || ""}`.trim()
                                 : "N/A"
                             }
                           />

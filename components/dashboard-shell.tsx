@@ -17,7 +17,7 @@ import { FINANCE_PRODUCTS } from "@/lib/config/finance-products";
 import { DEFAULT_TOPOLOGY, SOLAR_DEFAULTS } from "@/lib/config/solar";
 import { getLocalizedPresetMeta, LANGUAGE_OPTIONS, type AppLocale } from "@/lib/i18n";
 import { createEmptyMapSelection } from "@/lib/maps";
-import { requestSolarInsights } from "@/lib/solar-client";
+import { requestSolarDataLayers, requestSolarInsights } from "@/lib/solar-client";
 import {
   buildSolarSelectionMatchSummary,
   getGoogleSolarSellableAnnualGeneration,
@@ -27,7 +27,7 @@ import {
 import { formatCurrency, formatNumber } from "@/lib/utils";
 import type { MapSelectionSummary, PricingPreset } from "@/types/quote";
 import type { SystemTopology } from "@/types/bom";
-import type { GoogleSolarSummary, SolarLatLng } from "@/types/solar";
+import type { GoogleSolarDataLayerPaths, GoogleSolarSummary, SolarLatLng } from "@/types/solar";
 
 type StepNumber = 1 | 2 | 3 | 4;
 
@@ -79,6 +79,8 @@ function DashboardShellContent() {
   const [mapCenter, setMapCenter] = useState<SolarLatLng | null>(null);
   const [solarInsights, setSolarInsights] = useState<GoogleSolarSummary | null>(null);
   const [solarInsightsKey, setSolarInsightsKey] = useState<string | null>(null);
+  const [solarDataLayers, setSolarDataLayers] = useState<GoogleSolarDataLayerPaths | null>(null);
+  const [solarDataLayersKey, setSolarDataLayersKey] = useState<string | null>(null);
   const [solarStatus, setSolarStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [solarErrorMessage, setSolarErrorMessage] = useState<string | null>(null);
 
@@ -103,6 +105,8 @@ function DashboardShellContent() {
     : null;
 
   const activeSolarInsights = solarInsightsKey && solarRequestKey && solarInsightsKey === solarRequestKey ? solarInsights : null;
+  const activeSolarDataLayers =
+    solarDataLayersKey && solarRequestKey && solarDataLayersKey === solarRequestKey ? solarDataLayers : null;
   const solarNeedsRefresh = Boolean(solarRequestKey && solarInsightsKey && solarInsightsKey !== solarRequestKey);
 
   const solarSelectionMatch = useMemo(
@@ -282,11 +286,26 @@ function DashboardShellContent() {
       const payload = await requestSolarInsights(requestPoint);
       setSolarInsights(payload);
       setSolarInsightsKey(requestKey);
+      try {
+        const dataLayers = await requestSolarDataLayers(requestPoint);
+        setSolarDataLayers(dataLayers);
+        setSolarDataLayersKey(requestKey);
+      } catch (error) {
+        setSolarDataLayers(null);
+        setSolarDataLayersKey(null);
+        setSolarErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Google Solar data layers failed to load.",
+        );
+      }
       setSolarStatus("success");
       setValidationReviewed(true);
     } catch (error) {
       setSolarInsights(null);
       setSolarInsightsKey(null);
+      setSolarDataLayers(null);
+      setSolarDataLayersKey(null);
       setSolarStatus("error");
       setSolarErrorMessage(error instanceof Error ? error.message : "Unknown Google Solar error.");
     }
@@ -296,6 +315,8 @@ function DashboardShellContent() {
     if (!solarRequestKey || !solarRequestPoint) {
       setSolarInsights(null);
       setSolarInsightsKey(null);
+      setSolarDataLayers(null);
+      setSolarDataLayersKey(null);
       setSolarStatus("idle");
       setSolarErrorMessage(null);
       return;
@@ -673,6 +694,7 @@ function DashboardShellContent() {
                     <RoofReviewMap
                       selection={mapSelection}
                       solarInsights={activeSolarInsights}
+                      solarDataLayers={activeSolarDataLayers}
                       selectionMatch={solarSelectionMatch}
                       fallbackCenter={solarRequestPoint}
                       onEditRoof={() => setActiveStep(1)}
@@ -685,6 +707,7 @@ function DashboardShellContent() {
                     void fetchSolarData(solarRequestPoint, solarRequestKey);
                   }}
                   quoteResult={result}
+                  dataLayers={activeSolarDataLayers}
                 />
               </div>
             </StageFrame>

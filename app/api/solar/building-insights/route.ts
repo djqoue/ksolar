@@ -3,6 +3,12 @@ import { RUNTIME_FALLBACKS } from "@/lib/config/runtime-fallbacks";
 import { formatGoogleDate } from "@/lib/solar";
 import type { GoogleSolarSummary } from "@/types/solar";
 
+interface MoneyLike {
+  currencyCode?: string;
+  units?: string | number;
+  nanos?: number;
+}
+
 interface GoogleBuildingInsightsResponse {
   name?: string;
   center?: { latitude: number; longitude: number };
@@ -18,6 +24,7 @@ interface GoogleBuildingInsightsResponse {
     maxArrayPanelsCount?: number;
     maxArrayAreaMeters2?: number;
     maxSunshineHoursPerYear?: number;
+    carbonOffsetFactorKgPerMwh?: number;
     panelCapacityWatts?: number;
     panelHeightMeters?: number;
     panelWidthMeters?: number;
@@ -48,7 +55,32 @@ interface GoogleBuildingInsightsResponse {
     solarPanelConfigs?: Array<{
       panelsCount?: number;
       yearlyEnergyDcKwh?: number;
-      roofSegmentSummaries?: Array<unknown>;
+      roofSegmentSummaries?: Array<{
+        pitchDegrees?: number;
+        azimuthDegrees?: number;
+        panelsCount?: number;
+        yearlyEnergyDcKwh?: number;
+        segmentIndex?: number;
+      }>;
+    }>;
+    financialAnalyses?: Array<{
+      monthlyBill?: MoneyLike;
+      panelConfigIndex?: number;
+      financialDetails?: {
+        initialAcKwhPerYear?: number;
+        remainingLifetimeUtilityBill?: MoneyLike;
+        solarPercentage?: number;
+        percentageExportedToGrid?: number;
+      };
+      cashPurchaseSavings?: {
+        paybackYears?: number;
+      };
+      financedPurchaseSavings?: {
+        paybackYears?: number;
+      };
+      leasingSavings?: {
+        savingsYear1?: MoneyLike;
+      };
     }>;
   };
   error?: {
@@ -58,6 +90,23 @@ interface GoogleBuildingInsightsResponse {
   };
 }
 
+function toMoneyAmount(value?: MoneyLike): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const units =
+    typeof value.units === "string"
+      ? Number(value.units)
+      : typeof value.units === "number"
+        ? value.units
+        : 0;
+  const nanos = typeof value.nanos === "number" ? value.nanos / 1_000_000_000 : 0;
+  const amount = units + nanos;
+
+  return Number.isFinite(amount) ? amount : null;
+}
+
 function normalizeBuildingInsightsResponse(
   payload: GoogleBuildingInsightsResponse,
 ): GoogleSolarSummary | null {
@@ -65,7 +114,55 @@ function normalizeBuildingInsightsResponse(
     return null;
   }
 
-  const recommendedConfig = payload.solarPotential.solarPanelConfigs?.[0];
+  const availableConfigs =
+    payload.solarPotential.solarPanelConfigs?.map((config, index) => ({
+      index,
+      panelsCount: config.panelsCount || 0,
+      yearlyEnergyDcKwh: config.yearlyEnergyDcKwh || 0,
+      roofSegmentCount: config.roofSegmentSummaries?.length || 0,
+      roofSegmentSummaries:
+        config.roofSegmentSummaries?.map((segment) => ({
+          segmentIndex: segment.segmentIndex || 0,
+          pitchDegrees: segment.pitchDegrees || 0,
+          azimuthDegrees: segment.azimuthDegrees || 0,
+          panelsCount: segment.panelsCount || 0,
+          yearlyEnergyDcKwh: segment.yearlyEnergyDcKwh || 0,
+        })) || [],
+    })) || [];
+
+  const financialAnalyses =
+    payload.solarPotential.financialAnalyses?.map((analysis, index) => ({
+      index,
+      panelConfigIndex:
+        analysis.panelConfigIndex !== undefined ? analysis.panelConfigIndex : null,
+      monthlyBillAmount: toMoneyAmount(analysis.monthlyBill),
+      monthlyBillCurrencyCode: analysis.monthlyBill?.currencyCode,
+      yearlyAcKwh: analysis.financialDetails?.initialAcKwhPerYear ?? null,
+      remainingLifetimeBillAmount: toMoneyAmount(
+        analysis.financialDetails?.remainingLifetimeUtilityBill,
+      ),
+      solarPercentage: analysis.financialDetails?.solarPercentage ?? null,
+      percentageExportedToGrid:
+        analysis.financialDetails?.percentageExportedToGrid ?? null,
+      paybackYears:
+        analysis.cashPurchaseSavings?.paybackYears ??
+        analysis.financedPurchaseSavings?.paybackYears ??
+        null,
+    })) || [];
+
+  const maxConfig = availableConfigs.length > 0 ? availableConfigs[availableConfigs.length - 1] : undefined;
+  const billMatchedAnalysis = financialAnalyses.find(
+    (analysis) =>
+      analysis.panelConfigIndex !== null &&
+      analysis.panelConfigIndex >= 0 &&
+      analysis.panelConfigIndex < availableConfigs.length,
+  );
+  const billMatchedConfig =
+    billMatchedAnalysis?.panelConfigIndex !== null &&
+    billMatchedAnalysis?.panelConfigIndex !== undefined
+      ? availableConfigs[billMatchedAnalysis.panelConfigIndex]
+      : undefined;
+  const recommendedConfig = billMatchedConfig || maxConfig;
 
   return {
     buildingId: payload.name || "unknown-building",
@@ -93,18 +190,18 @@ function normalizeBuildingInsightsResponse(
     maxArrayPanelsCount: payload.solarPotential.maxArrayPanelsCount || 0,
     maxArrayAreaMeters2: payload.solarPotential.maxArrayAreaMeters2 || 0,
     maxSunshineHoursPerYear: payload.solarPotential.maxSunshineHoursPerYear || 0,
+    carbonOffsetFactorKgPerMwh: payload.solarPotential.carbonOffsetFactorKgPerMwh,
     panelCapacityWatts: payload.solarPotential.panelCapacityWatts || 0,
     panelHeightMeters: payload.solarPotential.panelHeightMeters || 0,
     panelWidthMeters: payload.solarPotential.panelWidthMeters || 0,
     roofAreaMeters2: payload.solarPotential.wholeRoofStats?.areaMeters2,
     roofGroundAreaMeters2: payload.solarPotential.wholeRoofStats?.groundAreaMeters2,
-    recommendedConfig: recommendedConfig
-      ? {
-          panelsCount: recommendedConfig.panelsCount || 0,
-          yearlyEnergyDcKwh: recommendedConfig.yearlyEnergyDcKwh || 0,
-          roofSegmentCount: recommendedConfig.roofSegmentSummaries?.length || 0,
-        }
-      : undefined,
+    availableConfigs,
+    maxConfig,
+    billMatchedConfig,
+    recommendedConfig,
+    configSelectionMethod: billMatchedConfig ? "financial-analysis" : "max-panels",
+    financialAnalyses,
     roofSegments:
       payload.solarPotential.roofSegmentStats?.map((segment, index) => ({
         segmentIndex: index,

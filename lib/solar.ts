@@ -40,6 +40,19 @@ export function formatGoogleDate(
   return `${value.year}-${String(value.month).padStart(2, "0")}-${String(value.day).padStart(2, "0")}`;
 }
 
+export function extractGeoTiffId(url?: string): string | null {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(url);
+    return parsed.searchParams.get("id");
+  } catch {
+    return null;
+  }
+}
+
 function isPointInsidePath(
   point: { latitude: number; longitude: number },
   path: Array<{ lat: number; lng: number }>,
@@ -218,13 +231,12 @@ export interface SolarCrossCheckSummary {
 export function getGoogleSolarRecommendedKw(
   insights?: GoogleSolarSummary | null,
 ): number | null {
-  if (!insights?.recommendedConfig || insights.panelCapacityWatts <= 0) {
+  const roofFitConfig = insights?.maxConfig ?? insights?.recommendedConfig;
+  if (!roofFitConfig || !insights || insights.panelCapacityWatts <= 0) {
     return null;
   }
 
-  return (
-    (insights.recommendedConfig.panelsCount * insights.panelCapacityWatts) / 1000
-  );
+  return (roofFitConfig.panelsCount * insights.panelCapacityWatts) / 1000;
 }
 
 export function getGoogleSolarNormalizedEquivalent(
@@ -234,7 +246,8 @@ export function getGoogleSolarNormalizedEquivalent(
   equivalentPanelCount: number | null;
   layoutAreaM2: number | null;
 } {
-  if (!insights?.recommendedConfig) {
+  const roofFitConfig = insights?.maxConfig ?? insights?.recommendedConfig;
+  if (!insights || !roofFitConfig) {
     return {
       equivalentKw: null,
       equivalentPanelCount: null,
@@ -251,7 +264,7 @@ export function getGoogleSolarNormalizedEquivalent(
     };
   }
 
-  const layoutAreaM2 = insights.recommendedConfig.panelsCount * googlePanelAreaM2;
+  const layoutAreaM2 = roofFitConfig.panelsCount * googlePanelAreaM2;
   const equivalentPanelCount = Math.floor(layoutAreaM2 / SOLAR_DEFAULTS.panelAreaM2);
 
   return {
@@ -296,7 +309,8 @@ export function getGoogleSolarSellableFit(
 export function getGoogleSolarSellableAnnualGeneration(
   insights?: GoogleSolarSummary | null,
 ): number | null {
-  if (!insights?.recommendedConfig || insights.recommendedConfig.yearlyEnergyDcKwh <= 0) {
+  const roofFitConfig = insights?.maxConfig ?? insights?.recommendedConfig;
+  if (!roofFitConfig || roofFitConfig.yearlyEnergyDcKwh <= 0 || !insights) {
     return null;
   }
 
@@ -308,7 +322,7 @@ export function getGoogleSolarSellableAnnualGeneration(
     return null;
   }
 
-  return insights.recommendedConfig.yearlyEnergyDcKwh * (targetKw / googleRawKw);
+  return roofFitConfig.yearlyEnergyDcKwh * (targetKw / googleRawKw);
 }
 
 export function buildSolarCrossCheckSummary(

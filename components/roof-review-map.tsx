@@ -1,21 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import { Circle as GoogleMapCircle, GoogleMap, Polygon as GoogleMapPolygon, useJsApiLoader } from "@react-google-maps/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Circle as GoogleMapCircle, GoogleMap, GroundOverlay, Polygon as GoogleMapPolygon, useJsApiLoader } from "@react-google-maps/api";
 import { CheckCircle2, MapPinned, PenSquare, TriangleAlert } from "lucide-react";
 import { useAppCopy } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RUNTIME_FALLBACKS } from "@/lib/config/runtime-fallbacks";
 import { GOOGLE_MAP_LIBRARIES } from "@/lib/maps";
+import { buildSolarDataLayerAnalysis } from "@/lib/solar-raster";
 import { formatNumber } from "@/lib/utils";
 import type { SolarSelectionMatchSummary } from "@/lib/solar";
 import type { MapSelectionSummary } from "@/types/quote";
-import type { GoogleSolarSummary, SolarLatLng } from "@/types/solar";
+import type { GoogleSolarDataLayerPaths, SolarDataLayerAnalysis, GoogleSolarSummary, SolarLatLng } from "@/types/solar";
 
 interface RoofReviewMapProps {
   selection: MapSelectionSummary;
   solarInsights?: GoogleSolarSummary | null;
+  solarDataLayers?: GoogleSolarDataLayerPaths | null;
   selectionMatch?: SolarSelectionMatchSummary | null;
   fallbackCenter?: SolarLatLng | null;
   onEditRoof: () => void;
@@ -41,6 +43,7 @@ function selectionHasGeoShapes(selection: MapSelectionSummary) {
 export function RoofReviewMap({
   selection,
   solarInsights,
+  solarDataLayers,
   selectionMatch,
   fallbackCenter,
   onEditRoof,
@@ -50,11 +53,82 @@ export function RoofReviewMap({
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || RUNTIME_FALLBACKS.googleMapsApiKey;
   const mapRef = useRef<google.maps.Map | null>(null);
   const hasGeoSelection = selectionHasGeoShapes(selection);
+  const [dataLayerAnalysis, setDataLayerAnalysis] = useState<SolarDataLayerAnalysis | null>(null);
+  const [isAnalyzingLayers, setIsAnalyzingLayers] = useState(false);
 
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey,
     libraries: GOOGLE_MAP_LIBRARIES,
   });
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!solarDataLayers) {
+      setDataLayerAnalysis(null);
+      return;
+    }
+
+    setIsAnalyzingLayers(true);
+    buildSolarDataLayerAnalysis(solarDataLayers)
+      .then((analysis) => {
+        if (!isCancelled) {
+          setDataLayerAnalysis(analysis);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setDataLayerAnalysis(null);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsAnalyzingLayers(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [solarDataLayers]);
+
+  const bestFluxMonth = useMemo(() => {
+    const monthly = dataLayerAnalysis?.monthlyFlux?.monthlyFluxMeans;
+    if (!monthly || monthly.length === 0) {
+      return null;
+    }
+
+    let index = 0;
+    let value = monthly[0] || 0;
+
+    monthly.forEach((entry, entryIndex) => {
+      if (entry > value) {
+        value = entry;
+        index = entryIndex;
+      }
+    });
+
+    return { index, value };
+  }, [dataLayerAnalysis?.monthlyFlux?.monthlyFluxMeans]);
+
+  const lowestFluxMonth = useMemo(() => {
+    const monthly = dataLayerAnalysis?.monthlyFlux?.monthlyFluxMeans;
+    if (!monthly || monthly.length === 0) {
+      return null;
+    }
+
+    let index = 0;
+    let value = monthly[0] || 0;
+
+    monthly.forEach((entry, entryIndex) => {
+      if (entry < value) {
+        value = entry;
+        index = entryIndex;
+      }
+    });
+
+    return { index, value };
+  }, [dataLayerAnalysis?.monthlyFlux?.monthlyFluxMeans]);
 
   const initialCenter = useMemo(() => {
     if (solarInsights?.center) {
@@ -145,6 +219,49 @@ export function RoofReviewMap({
           </div>
         </div>
 
+        {solarDataLayers ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-sm">
+              <div className="metric-label">{copy.solar.annualFluxMean}</div>
+              <div className="mt-1 text-base font-semibold text-slate-900">
+                {dataLayerAnalysis?.annualFluxOverlay?.meanFlux !== null &&
+                dataLayerAnalysis?.annualFluxOverlay?.meanFlux !== undefined
+                  ? `${formatNumber(dataLayerAnalysis.annualFluxOverlay.meanFlux, 0)} kWh/kW/yr`
+                  : isAnalyzingLayers
+                    ? copy.solar.loading
+                    : "N/A"}
+              </div>
+            </div>
+            <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-sm">
+              <div className="metric-label">{copy.solar.bestFluxMonth}</div>
+              <div className="mt-1 text-base font-semibold text-slate-900">
+                {bestFluxMonth ? copy.solar.monthName(bestFluxMonth.index) : isAnalyzingLayers ? copy.solar.loading : "N/A"}
+              </div>
+            </div>
+            <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-sm">
+              <div className="metric-label">{copy.solar.lowestFluxMonth}</div>
+              <div className="mt-1 text-base font-semibold text-slate-900">
+                {lowestFluxMonth ? copy.solar.monthName(lowestFluxMonth.index) : isAnalyzingLayers ? copy.solar.loading : "N/A"}
+              </div>
+            </div>
+            <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-sm">
+              <div className="metric-label">{copy.solar.sunAccess}</div>
+              <div className="mt-1 text-base font-semibold text-slate-900">
+                {dataLayerAnalysis?.hourlyShade?.monthlySunAccessRatio.length
+                  ? `${formatNumber(
+                      (dataLayerAnalysis.hourlyShade.monthlySunAccessRatio.reduce((sum, value) => sum + value, 0) /
+                        dataLayerAnalysis.hourlyShade.monthlySunAccessRatio.length) *
+                        100,
+                      0,
+                    )}%`
+                  : isAnalyzingLayers
+                    ? copy.solar.loading
+                    : "N/A"}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {!hasGeoSelection ? (
           <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
             {copy.solar.reviewMapNoSelection}
@@ -217,6 +334,23 @@ export function RoofReviewMap({
                 keyboardShortcuts: false,
               }}
             >
+              {dataLayerAnalysis?.annualFluxOverlay ? (
+                <GroundOverlay
+                  key={dataLayerAnalysis.annualFluxOverlay.dataUrl}
+                  url={dataLayerAnalysis.annualFluxOverlay.dataUrl}
+                  bounds={{
+                    north: dataLayerAnalysis.annualFluxOverlay.bounds.north,
+                    south: dataLayerAnalysis.annualFluxOverlay.bounds.south,
+                    east: dataLayerAnalysis.annualFluxOverlay.bounds.east,
+                    west: dataLayerAnalysis.annualFluxOverlay.bounds.west,
+                  }}
+                  options={{
+                    clickable: false,
+                    opacity: 0.72,
+                  }}
+                />
+              ) : null}
+
               {selection.shapes
                 .filter((shape) => shape.path.length > 0)
                 .map((shape) => (
