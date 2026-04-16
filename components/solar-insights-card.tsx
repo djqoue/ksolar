@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Building2, LoaderCircle, Sun, Telescope } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAppCopy, useLocaleContext } from "@/components/locale-provider";
@@ -27,6 +28,7 @@ interface SolarInsightsCardProps {
   requestPoint: SolarLatLng | null;
   selectionMatch: SolarSelectionMatchSummary | null;
   needsRefresh: boolean;
+  reviewMap?: ReactNode;
   onRefresh: () => void;
   quoteResult: QuoteScenarioResult;
 }
@@ -38,6 +40,7 @@ export function SolarInsightsCard({
   requestPoint,
   selectionMatch,
   needsRefresh,
+  reviewMap,
   onRefresh,
   quoteResult,
 }: SolarInsightsCardProps) {
@@ -70,6 +73,8 @@ export function SolarInsightsCard({
         </div>
       </CardHeader>
       <CardContent className="grid gap-4">
+        {reviewMap ? reviewMap : null}
+
         {requestPoint ? (
           <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-sm">
             {copy.solar.requestPoint}: {formatNumber(requestPoint.latitude, 5)}, {formatNumber(requestPoint.longitude, 5)}

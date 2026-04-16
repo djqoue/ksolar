@@ -635,30 +635,30 @@ function DashboardShellContent() {
                   <FinanceSelector selectedFinanceIds={selectedFinanceIds} onChange={handleFinanceChange} />
                 </div>
 
-                <div className="grid gap-4">
-                  <RoofReviewMap
-                    selection={mapSelection}
-                    solarInsights={activeSolarInsights}
-                    selectionMatch={solarSelectionMatch}
-                    fallbackCenter={solarRequestPoint}
-                    onEditRoof={() => setActiveStep(1)}
-                  />
-                  <SolarInsightsCard
-                    insights={activeSolarInsights}
-                    status={solarStatus}
-                    errorMessage={solarErrorMessage}
-                    requestPoint={solarRequestPoint}
-                    selectionMatch={solarSelectionMatch}
-                    needsRefresh={solarNeedsRefresh}
-                    onRefresh={() => {
-                      if (!solarRequestPoint || !solarRequestKey) {
-                        return;
-                      }
-                      void fetchSolarData(solarRequestPoint, solarRequestKey);
-                    }}
-                    quoteResult={result}
-                  />
-                </div>
+                <SolarInsightsCard
+                  insights={activeSolarInsights}
+                  status={solarStatus}
+                  errorMessage={solarErrorMessage}
+                  requestPoint={solarRequestPoint}
+                  selectionMatch={solarSelectionMatch}
+                  needsRefresh={solarNeedsRefresh}
+                  reviewMap={
+                    <RoofReviewMap
+                      selection={mapSelection}
+                      solarInsights={activeSolarInsights}
+                      selectionMatch={solarSelectionMatch}
+                      fallbackCenter={solarRequestPoint}
+                      onEditRoof={() => setActiveStep(1)}
+                    />
+                  }
+                  onRefresh={() => {
+                    if (!solarRequestPoint || !solarRequestKey) {
+                      return;
+                    }
+                    void fetchSolarData(solarRequestPoint, solarRequestKey);
+                  }}
+                  quoteResult={result}
+                />
               </div>
             </StageFrame>
           ) : null}
