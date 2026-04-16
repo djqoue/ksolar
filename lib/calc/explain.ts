@@ -8,6 +8,7 @@ export function buildCalculationExplanation(input: {
   usableAreaM2: number;
   panelCount: number;
   systemSizeWp: number;
+  quotedSystemSizeWp: number;
   annualGenerationKWh: number;
   annualSavingsTHB: number;
   selfConsumptionRatio: number;
@@ -29,6 +30,7 @@ export function buildCalculationExplanation(input: {
         "Usable area (m²)": formatNumber(input.usableAreaM2, 1),
         "Supported panels": input.panelCount,
         "System size": `${formatNumber(input.systemSizeWp / 1000, 2)} kWp`,
+        "Quoted package size": `${formatNumber(input.quotedSystemSizeWp / 1000, 2)} kWp`,
       },
     },
     {
@@ -72,4 +74,3 @@ export function buildCalculationExplanation(input: {
     },
   ];
 }
-

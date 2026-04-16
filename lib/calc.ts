@@ -6,18 +6,25 @@ import { buildSuggestedPrice } from "@/lib/calc/pricing";
 import { calculateRoofPotential } from "@/lib/calc/roof";
 import { recommendCapacityTier } from "@/lib/calc/sizing";
 import { calculateTariffValue } from "@/lib/calc/tariff";
+import { SOLAR_DEFAULTS } from "@/lib/config/solar";
 import type { QuoteScenarioInput, QuoteScenarioResult } from "@/types/quote";
 
 const GOOGLE_SELECTION_MISMATCH_WARNING =
   "Google Solar is not matched to the selected roof. Redraw the roof or re-center the map before trusting the quote.";
+const PACKAGE_CAP_WARNING =
+  "Current package is capped below the estimated roof fit. Review whether the customer site should use a larger package or switch phase.";
 
 export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenarioResult {
   const roof = calculateRoofPotential(input.map);
-  const effectivePanelCount =
+  const roofFitPanelCount =
     input.googleMatchedRoof && input.googleSellablePanelCount !== null && input.googleSellablePanelCount !== undefined
-      ? Math.min(roof.panelCount, input.googleSellablePanelCount)
+      ? input.googleSellablePanelCount
       : roof.panelCount;
-  const tierRecommendation = recommendCapacityTier(input.topology.phase, effectivePanelCount);
+  const roofFitSystemWp =
+    input.googleMatchedRoof && input.googleSellableFitWp !== null && input.googleSellableFitWp !== undefined
+      ? input.googleSellableFitWp
+      : roofFitPanelCount * SOLAR_DEFAULTS.panelPowerWp;
+  const tierRecommendation = recommendCapacityTier(input.topology.phase, roofFitPanelCount);
   const warnings = [...tierRecommendation.warnings];
 
   if (input.googleMatchedRoof === false) {
@@ -30,11 +37,11 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
       warnings,
       recommendedTier: null,
       usableAreaM2: roof.usableAreaM2,
-      panelCount: effectivePanelCount,
-      systemSizeWp:
-        input.googleMatchedRoof && input.googleSellableFitWp
-          ? input.googleSellableFitWp
-          : roof.theoreticalWp,
+      panelCount: roofFitPanelCount,
+      roofFitPanelCount,
+      roofFitSystemWp,
+      quotedSystemSizeWp: 0,
+      systemSizeWp: roofFitSystemWp || roof.theoreticalWp,
       annualGenerationKWh: 0,
       annualSavingsTHB: 0,
       hardwareCostTHB: 0,
@@ -53,6 +60,10 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
     };
   }
 
+  if (roofFitSystemWp > tierRecommendation.tier.nominalWp + SOLAR_DEFAULTS.panelPowerWp / 2) {
+    warnings.push(PACKAGE_CAP_WARNING);
+  }
+
   const generation = calculateGeneration(tierRecommendation.tier.nominalWp);
   const tariff = calculateTariffValue({
     annualGenerationKWh: generation.annualGenerationKWh,
@@ -68,8 +79,11 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
       warnings: ["No BOM template matches the selected phase, mode, and battery combination."],
       recommendedTier: tierRecommendation.tier,
       usableAreaM2: roof.usableAreaM2,
-      panelCount: effectivePanelCount,
-      systemSizeWp: tierRecommendation.tier.nominalWp,
+      panelCount: roofFitPanelCount,
+      roofFitPanelCount,
+      roofFitSystemWp,
+      quotedSystemSizeWp: tierRecommendation.tier.nominalWp,
+      systemSizeWp: roofFitSystemWp,
       annualGenerationKWh: generation.annualGenerationKWh,
       annualSavingsTHB: tariff.annualSavingsTHB,
       hardwareCostTHB: 0,
@@ -105,8 +119,11 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
     warnings,
     recommendedTier: tierRecommendation.tier,
     usableAreaM2: roof.usableAreaM2,
-    panelCount: effectivePanelCount,
-    systemSizeWp: tierRecommendation.tier.nominalWp,
+    panelCount: roofFitPanelCount,
+    roofFitPanelCount,
+    roofFitSystemWp,
+    quotedSystemSizeWp: tierRecommendation.tier.nominalWp,
+    systemSizeWp: roofFitSystemWp,
     annualGenerationKWh: generation.annualGenerationKWh,
     annualSavingsTHB: tariff.annualSavingsTHB,
     hardwareCostTHB: bom.hardwareCostTHB,
@@ -120,8 +137,9 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
     explanation: buildCalculationExplanation({
       grossAreaM2: roof.grossAreaM2,
       usableAreaM2: roof.usableAreaM2,
-      panelCount: roof.panelCount,
-      systemSizeWp: tierRecommendation.tier.nominalWp,
+      panelCount: roofFitPanelCount,
+      systemSizeWp: roofFitSystemWp,
+      quotedSystemSizeWp: tierRecommendation.tier.nominalWp,
       annualGenerationKWh: generation.annualGenerationKWh,
       annualSavingsTHB: tariff.annualSavingsTHB,
       selfConsumptionRatio: input.selfConsumptionRatio,

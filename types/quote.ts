@@ -56,6 +56,9 @@ export interface QuoteScenarioResult {
   recommendedTier: CapacityTier | null;
   usableAreaM2: number;
   panelCount: number;
+  roofFitPanelCount: number;
+  roofFitSystemWp: number;
+  quotedSystemSizeWp: number;
   systemSizeWp: number;
   annualGenerationKWh: number;
   annualSavingsTHB: number;

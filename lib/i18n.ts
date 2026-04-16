@@ -246,6 +246,8 @@ export const APP_COPY = {
       reviewMapMatched: "Google Solar appears to be aligned with the roof you selected.",
       reviewMapUnmatched: "Google Solar does not appear to be aligned with the roof you selected yet.",
       editRoof: "Edit roof",
+      roofFitEstimate: "Roof-fit estimate",
+      quotedPackage: "Quoted package",
       roofSegmentsOverlay: "Roof segments",
       googlePanelsOverlay: "Google panel spots",
       nearestBuilding: "Nearest Solar building",
@@ -271,6 +273,8 @@ export const APP_COPY = {
       googlePanelCount: "Google panel count",
       googleAnnualDc: "Google annual DC",
       googleSuggestedSize: "Google suggested size",
+      roofFitSize: "Roof-fit size",
+      quotedPackageSize: "Quoted package size",
       deltaVsQuote: "Delta vs current quote",
       marketBenchmark: "Market benchmark",
       marketBenchmarkDescription: "Reference price corridor:",
@@ -306,6 +310,7 @@ export const APP_COPY = {
         "Usable area (m²)": "Usable area (m²)",
         "Supported panels": "Supported panels",
         "System size": "System size",
+        "Quoted package size": "Quoted package size",
         "Annual generation": "Annual generation",
         "Retail rate": "Retail rate",
         "Self-use ratio": "Self-use ratio",
@@ -327,6 +332,8 @@ export const APP_COPY = {
         noBom: "No BOM template matches the selected phase, mode, and battery combination.",
         googleSelectionMismatch:
           "Google Solar is not matched to the selected roof. Redraw the roof or re-center the map before trusting the quote.",
+        packageCap:
+          "Current quoted package is smaller than the estimated roof fit. Review whether the project should move to a larger package or a different phase.",
       },
     },
   },
@@ -549,6 +556,8 @@ export const APP_COPY = {
       reviewMapMatched: "Google Solar 看起来已经和你圈选的屋顶对上了。",
       reviewMapUnmatched: "Google Solar 目前看起来还没有和你圈选的屋顶对上。",
       editRoof: "修改屋顶",
+      roofFitEstimate: "屋顶可铺容量",
+      quotedPackage: "当前报价方案",
       roofSegmentsOverlay: "屋顶分段",
       googlePanelsOverlay: "Google 板位点",
       nearestBuilding: "Google 最近建筑",
@@ -573,6 +582,8 @@ export const APP_COPY = {
       googlePanelCount: "Google 板数",
       googleAnnualDc: "Google 年发电（DC）",
       googleSuggestedSize: "Google 建议容量",
+      roofFitSize: "屋顶可铺容量",
+      quotedPackageSize: "当前报价方案容量",
       deltaVsQuote: "与当前报价差值",
       marketBenchmark: "市场参考",
       marketBenchmarkDescription: "参考价格区间：",
@@ -603,6 +614,7 @@ export const APP_COPY = {
         "Usable area (m²)": "可用面积 (m²)",
         "Supported panels": "可支持组件数",
         "System size": "系统容量",
+        "Quoted package size": "当前报价方案容量",
         "Annual generation": "年发电量",
         "Retail rate": "零售电价",
         "Self-use ratio": "自用比例",
@@ -624,6 +636,8 @@ export const APP_COPY = {
         noBom: "当前所选相位、模式和电池组合没有匹配的 BOM 模板。",
         googleSelectionMismatch:
           "Google Solar 当前没有匹配到你圈选的屋顶。请重新圈选屋顶或重新定位地图后，再信任这个报价。",
+        packageCap:
+          "当前报价方案低于屋顶估算可铺容量。请检查是否应该切换到更大的方案，或改用更合适的相位配置。",
       },
     },
   },
@@ -847,6 +861,8 @@ export const APP_COPY = {
       reviewMapMatched: "Google Solar ดูเหมือนจะตรงกับหลังคาที่คุณเลือกแล้ว",
       reviewMapUnmatched: "Google Solar ยังดูไม่ตรงกับหลังคาที่คุณเลือก",
       editRoof: "แก้ไขหลังคา",
+      roofFitEstimate: "ขนาดที่หลังคารองรับได้",
+      quotedPackage: "แพ็กเกจที่กำลังเสนอ",
       roofSegmentsOverlay: "ส่วนของหลังคา",
       googlePanelsOverlay: "ตำแหน่งแผงของ Google",
       nearestBuilding: "อาคารที่ Google Solar จับได้",
@@ -871,6 +887,8 @@ export const APP_COPY = {
       googlePanelCount: "จำนวนแผงของ Google",
       googleAnnualDc: "พลังงานต่อปีของ Google (DC)",
       googleSuggestedSize: "ขนาดที่ Google แนะนำ",
+      roofFitSize: "ขนาดที่หลังคารองรับได้",
+      quotedPackageSize: "ขนาดแพ็กเกจที่เสนอ",
       deltaVsQuote: "ส่วนต่างเทียบกับใบเสนอราคา",
       marketBenchmark: "กรอบราคาอ้างอิงตลาด",
       marketBenchmarkDescription: "ช่วงราคาอ้างอิง:",
@@ -901,6 +919,7 @@ export const APP_COPY = {
         "Usable area (m²)": "พื้นที่ใช้งานได้ (m²)",
         "Supported panels": "จำนวนแผงที่รองรับ",
         "System size": "ขนาดระบบ",
+        "Quoted package size": "ขนาดแพ็กเกจที่เสนอ",
         "Annual generation": "พลังงานต่อปี",
         "Retail rate": "อัตราค่าไฟ retail",
         "Self-use ratio": "สัดส่วนใช้เอง",
@@ -922,6 +941,8 @@ export const APP_COPY = {
         noBom: "ไม่มี BOM template ที่ตรงกับ phase, mode และ battery combination ที่เลือก",
         googleSelectionMismatch:
           "Google Solar ยังไม่ตรงกับหลังคาที่คุณเลือก โปรดวาดหลังคาใหม่หรือจัดตำแหน่งแผนที่ก่อนเชื่อราคาเสนอ",
+        packageCap:
+          "แพ็กเกจที่กำลังเสนอเล็กกว่าขนาดที่หลังคารองรับได้ ควรตรวจว่าควรเปลี่ยนเป็นแพ็กเกจที่ใหญ่ขึ้นหรือเปลี่ยน phase หรือไม่",
       },
     },
   },
@@ -956,6 +977,10 @@ export function localizeWarning(locale: AppLocale, warning: string) {
 
   if (warning === "Google Solar is not matched to the selected roof. Redraw the roof or re-center the map before trusting the quote.") {
     return copy.calc.warnings.googleSelectionMismatch;
+  }
+
+  if (warning === "Current package is capped below the estimated roof fit. Review whether the customer site should use a larger package or switch phase.") {
+    return copy.calc.warnings.packageCap;
   }
 
   return warning;

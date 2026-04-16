@@ -65,11 +65,17 @@ export function QuoteResults({
         <CardContent className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
           <div className="grid gap-4">
             <div className="rounded-[1.1rem] border border-border bg-white p-5">
-              <div className="metric-label">{copy.quote.systemSize}</div>
+              <div className="metric-label">{copy.quote.roofFitSize}</div>
               <div className="mt-2 text-[2.1rem] font-semibold tracking-tight text-slate-950 md:text-[2.6rem]">
                 {result.systemSizeWp > 0 ? `${formatNumber(result.systemSizeWp / 1000, 2)} kWp` : "N/A"}
               </div>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">{topologySummary}</p>
+              {result.quotedSystemSizeWp > 0 ? (
+                <p className="mt-2 text-sm leading-6 text-slate-700">
+                  {copy.quote.quotedPackageSize}: <span className="font-semibold">{formatNumber(result.quotedSystemSizeWp / 1000, 2)} kWp</span>
+                  {result.recommendedTier ? <span className="text-muted-foreground"> · {result.recommendedTier.id}</span> : null}
+                </p>
+              ) : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-[1rem] border border-border bg-white p-4">
@@ -109,7 +115,7 @@ export function QuoteResults({
             </div>
             <div className="rounded-[1.1rem] border border-border bg-muted/20 p-5 text-sm leading-6 text-slate-700">
               {result.recommendedTier
-                ? `${result.recommendedTier.id} ${topologySummary}. ${copy.quote.quoteSummaryDescription}`
+                ? `${copy.quote.quotedPackageSize}: ${result.recommendedTier.id} ${topologySummary}. ${copy.quote.quoteSummaryDescription}`
                 : copy.workflow.noProposal}
             </div>
           </div>
@@ -202,7 +208,8 @@ export function QuoteResults({
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryMetric label={copy.quote.systemSize} value={`${formatNumber(result.systemSizeWp / 1000, 2)} kWp`} />
+            <SummaryMetric label={copy.quote.roofFitSize} value={`${formatNumber(result.systemSizeWp / 1000, 2)} kWp`} />
+            <SummaryMetric label={copy.quote.quotedPackageSize} value={`${formatNumber(result.quotedSystemSizeWp / 1000, 2)} kWp`} />
             <SummaryMetric label={copy.quote.annualGeneration} value={`${formatNumber(result.annualGenerationKWh)} kWh`} />
             <SummaryMetric label={copy.quote.sellPrice} value={formatCurrency(result.suggestedSellPriceTHB)} />
             <SummaryMetric label={copy.quote.netCustomerPrice} value={formatCurrency(result.finance.financeAdjustedPriceTHB)} />

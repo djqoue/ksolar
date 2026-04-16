@@ -146,7 +146,7 @@ export function SolarInsightsCard({
                   </p>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                  <MetricBox label={copy.solar.manualQuote} value={`${formatNumber(crossCheckSummary?.manualKw || 0, 2)} kWp`} />
+                  <MetricBox label={copy.solar.roofFitEstimate} value={`${formatNumber(crossCheckSummary?.manualKw || 0, 2)} kWp`} />
                   <MetricBox
                     label={copy.solar.ksolarEquivalent}
                     value={
