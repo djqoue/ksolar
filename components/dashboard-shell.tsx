@@ -6,6 +6,7 @@ import { LocaleProvider, useAppCopy, useLocaleContext } from "@/components/local
 import { Map } from "@/components/Map";
 import { FinanceSelector } from "@/components/finance-selector";
 import { QuoteResults } from "@/components/quote-results";
+import { RoofReviewMap } from "@/components/roof-review-map";
 import { SolarInsightsCard } from "@/components/solar-insights-card";
 import { SystemSelector } from "@/components/system-selector";
 import { Button } from "@/components/ui/button";
@@ -213,6 +214,10 @@ function DashboardShellContent() {
   ].join(" · ");
 
   const roofSummaryItems = [
+    {
+      label: copy.solar.roofSelectionCount,
+      value: mapSelection.shapes.length > 0 ? formatNumber(mapSelection.shapes.length) : "0",
+    },
     {
       label: copy.map.grossArea,
       value: mapSelection.grossAreaM2 > 0 ? `${formatNumber(mapSelection.grossAreaM2, 1)} m²` : "N/A",
@@ -630,21 +635,30 @@ function DashboardShellContent() {
                   <FinanceSelector selectedFinanceIds={selectedFinanceIds} onChange={handleFinanceChange} />
                 </div>
 
-                <SolarInsightsCard
-                  insights={activeSolarInsights}
-                  status={solarStatus}
-                  errorMessage={solarErrorMessage}
-                  requestPoint={solarRequestPoint}
-                  selectionMatch={solarSelectionMatch}
-                  needsRefresh={solarNeedsRefresh}
-                  onRefresh={() => {
-                    if (!solarRequestPoint || !solarRequestKey) {
-                      return;
-                    }
-                    void fetchSolarData(solarRequestPoint, solarRequestKey);
-                  }}
-                  quoteResult={result}
-                />
+                <div className="grid gap-4">
+                  <RoofReviewMap
+                    selection={mapSelection}
+                    solarInsights={activeSolarInsights}
+                    selectionMatch={solarSelectionMatch}
+                    fallbackCenter={solarRequestPoint}
+                    onEditRoof={() => setActiveStep(1)}
+                  />
+                  <SolarInsightsCard
+                    insights={activeSolarInsights}
+                    status={solarStatus}
+                    errorMessage={solarErrorMessage}
+                    requestPoint={solarRequestPoint}
+                    selectionMatch={solarSelectionMatch}
+                    needsRefresh={solarNeedsRefresh}
+                    onRefresh={() => {
+                      if (!solarRequestPoint || !solarRequestKey) {
+                        return;
+                      }
+                      void fetchSolarData(solarRequestPoint, solarRequestKey);
+                    }}
+                    quoteResult={result}
+                  />
+                </div>
               </div>
             </StageFrame>
           ) : null}
