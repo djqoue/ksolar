@@ -601,8 +601,30 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
               </div>
             ) : null}
           </div>
+          {summary.shapes.length > 0 ? (
+            <div className="pointer-events-none absolute inset-x-3 bottom-3 z-10 sm:left-4 sm:right-auto sm:max-w-[320px]">
+              <div className="rounded-[1rem] border border-border/70 bg-background/95 px-4 py-3 shadow-sm backdrop-blur">
+                <div className="section-kicker text-primary">{copy.map.selectionReady}</div>
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="metric-label">{copy.map.grossArea}</div>
+                    <div className="mt-1 text-base font-semibold tracking-tight text-slate-900">
+                      {formatNumber(summary.grossAreaM2, 1)} m²
+                    </div>
+                  </div>
+                  <div>
+                    <div className="metric-label">{copy.map.usableArea}</div>
+                    <div className="mt-1 text-base font-semibold tracking-tight text-slate-900">
+                      {formatNumber(summary.usableAreaM2, 1)} m²
+                    </div>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">{copy.map.selectionReadyHint}</p>
+              </div>
+            </div>
+          ) : null}
           {solarSelectionMatch?.status === "outside-selection" ? (
-            <div className="absolute inset-x-3 bottom-3 z-10 rounded-xl border border-amber-300 bg-amber-50/95 px-4 py-3 text-sm text-amber-900 shadow-sm backdrop-blur sm:inset-x-4 sm:bottom-4">
+            <div className="absolute inset-x-3 bottom-32 z-10 rounded-xl border border-amber-300 bg-amber-50/95 px-4 py-3 text-sm text-amber-900 shadow-sm backdrop-blur sm:inset-x-4 sm:bottom-4 sm:left-auto sm:max-w-[360px]">
               <div className="font-medium">{copy.solar.mapOverlayUnmatched}</div>
               {solarSelectionMatch.distanceToNearestShapeMeters !== null ? (
                 <div className="mt-1 text-xs text-amber-900/80">
@@ -612,7 +634,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             </div>
           ) : null}
           {solarSelectionMatch?.status === "inside-selection" ? (
-            <div className="absolute inset-x-3 bottom-3 z-10 rounded-xl border border-emerald-200 bg-emerald-50/95 px-4 py-3 text-sm text-emerald-900 shadow-sm backdrop-blur sm:inset-x-4 sm:bottom-4">
+            <div className="absolute inset-x-3 bottom-32 z-10 rounded-xl border border-emerald-200 bg-emerald-50/95 px-4 py-3 text-sm text-emerald-900 shadow-sm backdrop-blur sm:inset-x-4 sm:bottom-4 sm:left-auto sm:max-w-[360px]">
               {copy.solar.mapOverlayMatched}
             </div>
           ) : null}
