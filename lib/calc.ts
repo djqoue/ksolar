@@ -6,6 +6,9 @@ import { buildSuggestedPrice } from "@/lib/calc/pricing";
 import { calculateRoofPotential } from "@/lib/calc/roof";
 import { recommendCapacityTier } from "@/lib/calc/sizing";
 import { calculateTariffValue } from "@/lib/calc/tariff";
+import { findBattery } from "@/lib/config/battery-catalog";
+import { findInverter } from "@/lib/config/inverter-catalog";
+import { findPanel } from "@/lib/config/panel-catalog";
 import { SOLAR_DEFAULTS } from "@/lib/config/solar";
 import type { QuoteScenarioInput, QuoteScenarioResult } from "@/types/quote";
 
@@ -77,7 +80,42 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
     selfConsumptionRatio: input.selfConsumptionRatio,
     exportRateTHBPerKWh: input.exportRateTHBPerKWh,
   });
-  const bom = buildBomScenario(input.topology, tierRecommendation.tier);
+  // Resolve equipment overrides from catalog selections
+  const selectedPanel = input.selectedPanelId ? findPanel(input.selectedPanelId) : undefined;
+  const selectedInverter =
+    input.selectedInverterId && input.selectedInverterId !== "auto"
+      ? findInverter(input.selectedInverterId)
+      : undefined;
+  const selectedBattery =
+    input.selectedBatteryId && input.selectedBatteryId !== "auto"
+      ? findBattery(input.selectedBatteryId)
+      : undefined;
+
+  const equipmentOverrides = {
+    panel:
+      selectedPanel?.unitCostTHB != null
+        ? {
+            model: `${selectedPanel.manufacturer} ${selectedPanel.model} (${selectedPanel.peakPowerW}W)`,
+            unitCostTHB: selectedPanel.unitCostTHB,
+          }
+        : undefined,
+    inverter:
+      selectedInverter?.unitCostTHB != null
+        ? {
+            model: `${selectedInverter.manufacturer} ${selectedInverter.model}`,
+            unitCostTHB: selectedInverter.unitCostTHB,
+          }
+        : undefined,
+    battery:
+      selectedBattery
+        ? {
+            model: `${selectedBattery.manufacturer} ${selectedBattery.model} (${selectedBattery.capacityKWh}kWh)`,
+            unitCostTHB: selectedBattery.unitCostTHB,
+          }
+        : undefined,
+  };
+
+  const bom = buildBomScenario(input.topology, tierRecommendation.tier, equipmentOverrides);
 
   if (!bom) {
     return {

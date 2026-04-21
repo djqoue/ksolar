@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { calculateQuoteScenario } from "@/lib/calc";
 import { FINANCE_PRODUCTS } from "@/lib/config/finance-products";
+import { DEFAULT_PANEL_ID } from "@/lib/config/panel-catalog";
 import { DEFAULT_TOPOLOGY, SOLAR_DEFAULTS } from "@/lib/config/solar";
 import { getLocalizedPresetMeta, LANGUAGE_OPTIONS, type AppLocale } from "@/lib/i18n";
 import { createEmptyMapSelection } from "@/lib/maps";
@@ -67,6 +68,9 @@ function DashboardShellContent() {
   const [mapSelection, setMapSelection] = useState<MapSelectionSummary>(createEmptyMapSelection());
   const [topology, setTopology] = useState(DEFAULT_TOPOLOGY);
   const [pricingPresetId, setPricingPresetId] = useState<PricingPreset["id"]>("standard");
+  const [selectedPanelId, setSelectedPanelId] = useState<string>(DEFAULT_PANEL_ID);
+  const [selectedInverterId, setSelectedInverterId] = useState<string>("auto");
+  const [selectedBatteryId, setSelectedBatteryId] = useState<string>("auto");
   const [selectedFinanceIds, setSelectedFinanceIds] = useState(
     FINANCE_PRODUCTS.filter((product) => product.enabledByDefault).map((product) => product.id),
   );
@@ -130,6 +134,9 @@ function DashboardShellContent() {
       googleSellableFitWp: googleSellableFit.equivalentKw ? googleSellableFit.equivalentKw * 1000 : null,
       googleSellablePanelCount: googleSellableFit.equivalentPanelCount,
       googleAnnualGenerationKWh: googleSellableAnnualGeneration,
+      selectedPanelId,
+      selectedInverterId,
+      selectedBatteryId,
     });
   }, [
     exportRateTHBPerKWh,
@@ -141,6 +148,9 @@ function DashboardShellContent() {
     activeSolarInsights,
     solarSelectionMatch.status,
     topology,
+    selectedPanelId,
+    selectedInverterId,
+    selectedBatteryId,
   ]);
 
   const steps = useMemo<WorkflowStepState[]>(
@@ -593,8 +603,14 @@ function DashboardShellContent() {
                 <SystemSelector
                   topology={topology}
                   pricingPresetId={pricingPresetId}
+                  selectedPanelId={selectedPanelId}
+                  selectedInverterId={selectedInverterId}
+                  selectedBatteryId={selectedBatteryId}
                   onTopologyChange={handleTopologyChange}
                   onPricingPresetChange={handlePricingPresetChange}
+                  onPanelChange={setSelectedPanelId}
+                  onInverterChange={setSelectedInverterId}
+                  onBatteryChange={setSelectedBatteryId}
                 />
               </div>
             </StageFrame>

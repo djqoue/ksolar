@@ -49,6 +49,12 @@ export interface QuoteScenarioInput {
   googleSellableFitWp?: number | null;
   googleSellablePanelCount?: number | null;
   googleAnnualGenerationKWh?: number | null;
+  /** Panel catalog ID from PANEL_CATALOG; undefined → use BOM default */
+  selectedPanelId?: string;
+  /** Inverter catalog ID from INVERTER_CATALOG; "auto" or undefined → use BOM default */
+  selectedInverterId?: string;
+  /** Battery catalog ID from BATTERY_CATALOG; "auto" or undefined → use BOM default */
+  selectedBatteryId?: string;
 }
 
 export interface QuoteScenarioResult {

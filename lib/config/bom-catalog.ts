@@ -1,4 +1,5 @@
 import type { BomCategory, BomLineItemTemplate, BomScenarioTemplate, CapacityTierId, SystemTopology } from "@/types/bom";
+import { cnyToThb } from "@/lib/config/currency";
 
 type QuantityMap = Partial<Record<CapacityTierId, number>>;
 
@@ -42,13 +43,16 @@ function createSheetTemplates(sheet: DetailedBomSheet) {
   return sheet.supportedTiers.map((tierId) => buildTemplateForTier(sheet, tierId));
 }
 
+// Panel unit price sourced from iSolarBP 设计物料管理 > 组件 (scraped 2026-04-20)
+// Closest match: 天合 TSM-NEG20C.20 650W = 422.5 CNY/pcs → cnyToThb(422.5) = 2155 THB
+// Previous estimate was 2600 THB (-17%). Update when market rate changes.
 const ONE_PHASE_PANEL_ITEM: DetailedBomItem = {
   id: "pv-module",
   category: "panel",
   name: "PV Module",
   model: "Trina Vertex N TSM-NEG19RC.20 (650W)",
   unit: "pcs",
-  unitCostTHB: 2600,
+  unitCostTHB: cnyToThb(422.5), // 422.5 CNY × 5.10 = 2155 THB
   quantities: {
     "3kW": 5,
     "5kW": 8,
@@ -250,13 +254,15 @@ const ONE_PHASE_AC_HYBRID_ITEMS: DetailedBomItem[] = [
   ONE_PHASE_AC_ONGRID_ITEMS[3],
 ];
 
+// Panel unit price sourced from iSolarBP 设计物料管理 > 组件 (scraped 2026-04-20)
+// Closest match: 天合 TSM-NEG20C.20 650W = 422.5 CNY/pcs → cnyToThb(422.5) = 2155 THB
 const THREE_PHASE_PANEL_ITEM: DetailedBomItem = {
   id: "pv-module",
   category: "panel",
   name: "PV Module",
   model: "Trina Vertex N TSM-NEG19RC.20 (650W)",
   unit: "pcs",
-  unitCostTHB: 2600,
+  unitCostTHB: cnyToThb(422.5), // 422.5 CNY × 5.10 = 2155 THB
   quantities: {
     "5kW": 8,
     "10kW": 16,
