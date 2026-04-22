@@ -16,7 +16,7 @@ import type { SystemTopology } from "@/types/bom";
 import type { PricingPreset } from "@/types/quote";
 
 // Manufacturer display order in the panel dropdown
-const MFG_ORDER = ["Trina Solar", "LONGi", "JA Solar", "Tongwei", "Sungrow Solar", "GCL", "Unknown"];
+const MFG_ORDER = ["Trina Solar", "LONGi", "JA Solar", "Tongwei", "Sungrow Solar", "GCL", "Powitt Solar", "Unknown"];
 
 // Sentinel value meaning "let BOM template pick automatically"
 const AUTO = "auto";
