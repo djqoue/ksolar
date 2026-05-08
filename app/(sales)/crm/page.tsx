@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ComponentType } from "react";
-import { BarChart3, Database, FileText, Users } from "lucide-react";
-import { signOut } from "@/app/(auth)/login/actions";
+import { ArrowLeft, BarChart3, Database, FileText, Users } from "lucide-react";
+import { CrmLogoutButton } from "@/components/crm-logout-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -60,9 +61,17 @@ export default async function CrmPage() {
               User primary id: <span className="font-mono text-slate-800">{user.id}</span>
             </p>
           </div>
-          <form action={signOut}>
-            <Button type="submit" variant="outline">退出登录</Button>
-          </form>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button asChild variant="default">
+              <Link href="/">
+                <ArrowLeft className="size-4" />
+                返回报价工具
+              </Link>
+            </Button>
+            <form action="/logout" method="post">
+              <CrmLogoutButton />
+            </form>
+          </div>
         </header>
 
         {hasMigrationError ? (
