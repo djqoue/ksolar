@@ -12,6 +12,7 @@ import { SystemSelector } from "@/components/system-selector";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { isSupabaseConfigured } from "@/lib/auth/supabase-config";
 import { calculateQuoteScenario } from "@/lib/calc";
 import { FINANCE_PRODUCTS } from "@/lib/config/finance-products";
 import { DEFAULT_PANEL_ID, findPanel, getPanelAreaM2 } from "@/lib/config/panel-catalog";
@@ -87,6 +88,7 @@ function DashboardShellContent() {
   const [solarDataLayersKey, setSolarDataLayersKey] = useState<string | null>(null);
   const [solarStatus, setSolarStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [solarErrorMessage, setSolarErrorMessage] = useState<string | null>(null);
+  const crmEnabled = isSupabaseConfigured();
 
   const step1Done = mapSelection.grossAreaM2 > 0;
   const step2Done = step1Done;
@@ -373,6 +375,11 @@ function DashboardShellContent() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {crmEnabled ? (
+              <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
+                <a href="/crm">CRM</a>
+              </Button>
+            ) : null}
             {LANGUAGE_OPTIONS.map((option) => (
               <Button
                 key={option.value}

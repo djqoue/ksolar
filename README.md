@@ -31,11 +31,14 @@ Create `.env.local` with:
 ```bash
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_browser_maps_key
 GOOGLE_SOLAR_API_KEY=your_server_side_solar_key
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
 ```
 
 Notes:
 - `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is used in the browser for the map UI.
 - `GOOGLE_SOLAR_API_KEY` is used only by the server route at `/api/solar/building-insights`.
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` enable the sales login and CRM foundation.
 - Do not commit real keys into Git.
 
 ## Best Way To Share With Teammates
@@ -95,6 +98,8 @@ If you do not want to deploy yet, there are two backup options:
 - [Google Solar roadmap](./docs/google-solar-roadmap.md)
 - [production architecture](./docs/production-architecture.md)
 - [AI workflow architecture](./docs/ai-workflow-architecture.md)
+- [CRM data model](./docs/crm-data-model.md)
+- [Auth and CRM rollout](./docs/auth-and-crm-rollout.md)
 
 ## Validation
 
