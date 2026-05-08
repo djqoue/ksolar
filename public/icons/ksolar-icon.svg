@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">KSolar app icon</title>
+  <desc id="desc">A solar panel and sun mark for the KSolar field quote app.</desc>
+  <rect width="512" height="512" rx="112" fill="#f8faf9"/>
+  <circle cx="370" cy="138" r="58" fill="#f7c948"/>
+  <path d="M116 184c0-22.1 17.9-40 40-40h162c22.1 0 40 17.9 40 40v18H116v-18Z" fill="#134e4a"/>
+  <path d="M102 214h300l-48 166H54l48-166Z" fill="#0f766e"/>
+  <path d="M141 244h58l-12 40h-58l12-40Zm84 0h58l-12 40h-58l12-40Zm84 0h58l-12 40h-58l12-40ZM119 316h58l-12 40h-58l12-40Zm84 0h58l-12 40h-58l12-40Zm84 0h58l-12 40h-58l12-40Z" fill="#d1fae5" opacity=".9"/>
+  <path d="M392 398H72c-13.3 0-24-10.7-24-24s10.7-24 24-24h320c13.3 0 24 10.7 24 24s-10.7 24-24 24Z" fill="#042f2e"/>
+  <path d="M126 414h212c13.3 0 24 10.7 24 24s-10.7 24-24 24H126c-13.3 0-24-10.7-24-24s10.7-24 24-24Z" fill="#14b8a6"/>
+</svg>

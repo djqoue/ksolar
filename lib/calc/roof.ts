@@ -8,10 +8,20 @@ export interface RoofPotential {
   theoreticalWp: number;
 }
 
-export function calculateRoofPotential(map: MapSelectionSummary): RoofPotential {
+export interface RoofCalculationProfile {
+  panelAreaM2?: number;
+  panelPowerWp?: number;
+}
+
+export function calculateRoofPotential(
+  map: MapSelectionSummary,
+  profile: RoofCalculationProfile = {},
+): RoofPotential {
+  const panelAreaM2 = profile.panelAreaM2 || SOLAR_DEFAULTS.panelAreaM2;
+  const panelPowerWp = profile.panelPowerWp || SOLAR_DEFAULTS.panelPowerWp;
   const usableAreaM2 = map.usableAreaM2 || map.grossAreaM2 * (map.usableAreaFactor || SOLAR_DEFAULTS.usableAreaFactor);
-  const panelCount = Math.max(0, Math.floor(usableAreaM2 / SOLAR_DEFAULTS.panelAreaM2));
-  const theoreticalWp = panelCount * SOLAR_DEFAULTS.panelPowerWp;
+  const panelCount = panelAreaM2 > 0 ? Math.max(0, Math.floor(usableAreaM2 / panelAreaM2)) : 0;
+  const theoreticalWp = panelCount * panelPowerWp;
 
   return {
     grossAreaM2: map.grossAreaM2,
@@ -20,4 +30,3 @@ export function calculateRoofPotential(map: MapSelectionSummary): RoofPotential 
     theoreticalWp,
   };
 }
-

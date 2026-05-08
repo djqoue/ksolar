@@ -2,15 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Circle as GoogleMapCircle, GoogleMap, GroundOverlay, Polygon as GoogleMapPolygon, useJsApiLoader } from "@react-google-maps/api";
-import { CheckCircle2, MapPinned, PenSquare, TriangleAlert } from "lucide-react";
-import { useAppCopy } from "@/components/locale-provider";
+import { CheckCircle2, Grid2X2, Layers3, MapPinned, PenSquare, SunMedium, TriangleAlert } from "lucide-react";
+import { useAppCopy, useLocaleContext } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RUNTIME_FALLBACKS } from "@/lib/config/runtime-fallbacks";
 import { GOOGLE_MAP_LIBRARIES } from "@/lib/maps";
 import { buildSolarDataLayerAnalysis } from "@/lib/solar-raster";
 import { formatNumber } from "@/lib/utils";
-import type { SolarSelectionMatchSummary } from "@/lib/solar";
+import { buildGoogleSolarPanelFootprints, isSolarPointInsideSelection, type SolarSelectionMatchSummary } from "@/lib/solar";
 import type { MapSelectionSummary } from "@/types/quote";
 import type { GoogleSolarDataLayerPaths, SolarDataLayerAnalysis, GoogleSolarSummary, SolarLatLng } from "@/types/solar";
 
@@ -49,12 +49,53 @@ export function RoofReviewMap({
   onEditRoof,
 }: RoofReviewMapProps) {
   const copy = useAppCopy();
+  const { locale } = useLocaleContext();
   const googleMapsApiKey =
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || RUNTIME_FALLBACKS.googleMapsApiKey;
   const mapRef = useRef<google.maps.Map | null>(null);
   const hasGeoSelection = selectionHasGeoShapes(selection);
   const [dataLayerAnalysis, setDataLayerAnalysis] = useState<SolarDataLayerAnalysis | null>(null);
   const [isAnalyzingLayers, setIsAnalyzingLayers] = useState(false);
+  const [visibleLayers, setVisibleLayers] = useState({
+    annualFlux: true,
+    panelArray: true,
+    selectedRoof: true,
+    googleBoundary: true,
+    roofSegments: false,
+  });
+  const layerLabels =
+    locale === "zh"
+      ? {
+          title: "图层",
+          annualFlux: "热力图",
+          panelArray: "板阵列",
+          selectedRoof: "圈选屋顶",
+          googleBoundary: "Google边界",
+          roofSegments: "坡面",
+          selectedMask: "圈选屋顶",
+          googleMask: "Google屋顶",
+        }
+      : locale === "th"
+        ? {
+            title: "เลเยอร์",
+            annualFlux: "ความร้อน",
+            panelArray: "แผง",
+            selectedRoof: "หลังคาที่เลือก",
+            googleBoundary: "ขอบ Google",
+            roofSegments: "หน้าหลังคา",
+            selectedMask: "หลังคาที่เลือก",
+            googleMask: "หลังคา Google",
+          }
+        : {
+            title: "Layers",
+            annualFlux: "Heatmap",
+            panelArray: "Panels",
+            selectedRoof: "Selection",
+            googleBoundary: "Google edge",
+            roofSegments: "Segments",
+            selectedMask: "Selected roof",
+            googleMask: "Google roof",
+          };
 
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey,
@@ -70,7 +111,7 @@ export function RoofReviewMap({
     }
 
     setIsAnalyzingLayers(true);
-    buildSolarDataLayerAnalysis(solarDataLayers)
+    buildSolarDataLayerAnalysis(solarDataLayers, selection.shapes)
       .then((analysis) => {
         if (!isCancelled) {
           setDataLayerAnalysis(analysis);
@@ -90,7 +131,7 @@ export function RoofReviewMap({
     return () => {
       isCancelled = true;
     };
-  }, [solarDataLayers]);
+  }, [selection.shapes, solarDataLayers]);
 
   const bestFluxMonth = useMemo(() => {
     const monthly = dataLayerAnalysis?.monthlyFlux?.monthlyFluxMeans;
@@ -129,6 +170,27 @@ export function RoofReviewMap({
 
     return { index, value };
   }, [dataLayerAnalysis?.monthlyFlux?.monthlyFluxMeans]);
+
+  const annualFluxMean = dataLayerAnalysis?.annualFluxOverlay?.meanFlux;
+  const hasAnnualFlux = annualFluxMean !== null && annualFluxMean !== undefined;
+  const annualFluxMaskLabel =
+    dataLayerAnalysis?.annualFluxOverlay?.maskSource === "google-building"
+      ? layerLabels.googleMask
+      : layerLabels.selectedMask;
+  const hasMonthlyFlux =
+    Boolean(dataLayerAnalysis?.monthlyFlux?.monthlyFluxMeans.some((value) => value > 0));
+  const averageSunAccessRatio = dataLayerAnalysis?.hourlyShade?.monthlySunAccessRatio.length
+    ? dataLayerAnalysis.hourlyShade.monthlySunAccessRatio.reduce((sum, value) => sum + value, 0) /
+      dataLayerAnalysis.hourlyShade.monthlySunAccessRatio.length
+    : null;
+  const hasSunAccess = averageSunAccessRatio !== null && averageSunAccessRatio > 0;
+  const panelOverlay = useMemo(() => {
+    const panels = buildGoogleSolarPanelFootprints(solarInsights).slice(0, 220);
+    const inside = panels.filter((panel) => isSolarPointInsideSelection(panel.center, selection.shapes));
+    const outside = panels.filter((panel) => !isSolarPointInsideSelection(panel.center, selection.shapes));
+
+    return { inside, outside, total: panels.length };
+  }, [selection.shapes, solarInsights]);
 
   const initialCenter = useMemo(() => {
     if (solarInsights?.center) {
@@ -224,39 +286,33 @@ export function RoofReviewMap({
             <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-sm">
               <div className="metric-label">{copy.solar.annualFluxMean}</div>
               <div className="mt-1 text-base font-semibold text-slate-900">
-                {dataLayerAnalysis?.annualFluxOverlay?.meanFlux !== null &&
-                dataLayerAnalysis?.annualFluxOverlay?.meanFlux !== undefined
-                  ? `${formatNumber(dataLayerAnalysis.annualFluxOverlay.meanFlux, 0)} kWh/kW/yr`
+                {hasAnnualFlux
+                  ? `${formatNumber(annualFluxMean, 0)} kWh/kW/yr · ${annualFluxMaskLabel}`
                   : isAnalyzingLayers
                     ? copy.solar.loading
-                    : "N/A"}
+                    : copy.solar.dataLayerNoOverlap}
               </div>
             </div>
             <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-sm">
               <div className="metric-label">{copy.solar.bestFluxMonth}</div>
               <div className="mt-1 text-base font-semibold text-slate-900">
-                {bestFluxMonth ? copy.solar.monthName(bestFluxMonth.index) : isAnalyzingLayers ? copy.solar.loading : "N/A"}
+                {bestFluxMonth && hasMonthlyFlux ? copy.solar.monthName(bestFluxMonth.index) : isAnalyzingLayers ? copy.solar.loading : copy.solar.dataLayerNoOverlap}
               </div>
             </div>
             <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-sm">
               <div className="metric-label">{copy.solar.lowestFluxMonth}</div>
               <div className="mt-1 text-base font-semibold text-slate-900">
-                {lowestFluxMonth ? copy.solar.monthName(lowestFluxMonth.index) : isAnalyzingLayers ? copy.solar.loading : "N/A"}
+                {lowestFluxMonth && hasMonthlyFlux ? copy.solar.monthName(lowestFluxMonth.index) : isAnalyzingLayers ? copy.solar.loading : copy.solar.dataLayerNoOverlap}
               </div>
             </div>
             <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-sm">
               <div className="metric-label">{copy.solar.sunAccess}</div>
               <div className="mt-1 text-base font-semibold text-slate-900">
-                {dataLayerAnalysis?.hourlyShade?.monthlySunAccessRatio.length
-                  ? `${formatNumber(
-                      (dataLayerAnalysis.hourlyShade.monthlySunAccessRatio.reduce((sum, value) => sum + value, 0) /
-                        dataLayerAnalysis.hourlyShade.monthlySunAccessRatio.length) *
-                        100,
-                      0,
-                    )}%`
+                {hasSunAccess
+                  ? `${formatNumber(averageSunAccessRatio * 100, 0)}%`
                   : isAnalyzingLayers
                     ? copy.solar.loading
-                    : "N/A"}
+                    : copy.solar.dataLayerNoOverlap}
               </div>
             </div>
           </div>
@@ -289,6 +345,15 @@ export function RoofReviewMap({
           </div>
         ) : null}
 
+        {solarInsights?.solarPanels.length ? (
+          <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 text-sm text-slate-700">
+            <div className="font-medium text-slate-900">{copy.solar.rawPanelPointNotice}</div>
+            <div className="mt-1 text-muted-foreground">
+              {copy.solar.visibleGooglePanelPoints(panelOverlay.inside.length, panelOverlay.total)}
+            </div>
+          </div>
+        ) : null}
+
         {selectionMatch?.status === "outside-selection" ? (
           <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" />
@@ -304,16 +369,46 @@ export function RoofReviewMap({
         ) : null}
 
         <div className="relative h-[320px] overflow-hidden rounded-[1.1rem] border border-border/70 sm:h-[420px]">
-          <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap gap-2">
-            <div className="rounded-full bg-background/92 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm">
-              <MapPinned className="mr-1 inline size-3.5" />
-              {copy.solar.selectedRoofOverlay}
+          <div className="absolute right-3 top-3 z-10 w-[min(92%,340px)] rounded-2xl border border-white/70 bg-white/92 p-2 shadow-[0_18px_48px_rgba(15,23,42,0.16)] backdrop-blur">
+            <div className="mb-2 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              <Layers3 className="size-3.5" />
+              {layerLabels.title}
             </div>
-            {solarInsights ? (
-              <div className="rounded-full bg-background/92 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm">
-                {copy.solar.mapOverlayTitle}
-              </div>
-            ) : null}
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+              <LayerToggle
+                active={visibleLayers.annualFlux}
+                disabled={!dataLayerAnalysis?.annualFluxOverlay}
+                label={layerLabels.annualFlux}
+                icon={<SunMedium className="size-3.5" />}
+                onClick={() => setVisibleLayers((current) => ({ ...current, annualFlux: !current.annualFlux }))}
+              />
+              <LayerToggle
+                active={visibleLayers.panelArray}
+                disabled={!solarInsights?.solarPanels.length}
+                label={layerLabels.panelArray}
+                icon={<Grid2X2 className="size-3.5" />}
+                onClick={() => setVisibleLayers((current) => ({ ...current, panelArray: !current.panelArray }))}
+              />
+              <LayerToggle
+                active={visibleLayers.selectedRoof}
+                disabled={!selection.shapes.some((shape) => shape.path.length > 0)}
+                label={layerLabels.selectedRoof}
+                icon={<MapPinned className="size-3.5" />}
+                onClick={() => setVisibleLayers((current) => ({ ...current, selectedRoof: !current.selectedRoof }))}
+              />
+              <LayerToggle
+                active={visibleLayers.googleBoundary}
+                disabled={!solarInsights?.boundingBox}
+                label={layerLabels.googleBoundary}
+                onClick={() => setVisibleLayers((current) => ({ ...current, googleBoundary: !current.googleBoundary }))}
+              />
+              <LayerToggle
+                active={visibleLayers.roofSegments}
+                disabled={!solarInsights?.roofSegments.length}
+                label={layerLabels.roofSegments}
+                onClick={() => setVisibleLayers((current) => ({ ...current, roofSegments: !current.roofSegments }))}
+              />
+            </div>
           </div>
 
           {isLoaded ? (
@@ -329,12 +424,12 @@ export function RoofReviewMap({
                 draggable: true,
                 fullscreenControl: false,
                 streetViewControl: false,
-                mapTypeControl: true,
+                mapTypeControl: false,
                 clickableIcons: false,
                 keyboardShortcuts: false,
               }}
             >
-              {dataLayerAnalysis?.annualFluxOverlay ? (
+              {visibleLayers.annualFlux && dataLayerAnalysis?.annualFluxOverlay ? (
                 <GroundOverlay
                   key={dataLayerAnalysis.annualFluxOverlay.dataUrl}
                   url={dataLayerAnalysis.annualFluxOverlay.dataUrl}
@@ -351,7 +446,7 @@ export function RoofReviewMap({
                 />
               ) : null}
 
-              {selection.shapes
+              {visibleLayers.selectedRoof ? selection.shapes
                 .filter((shape) => shape.path.length > 0)
                 .map((shape) => (
                   <GoogleMapPolygon
@@ -368,9 +463,9 @@ export function RoofReviewMap({
                       zIndex: 4,
                     }}
                   />
-                ))}
+                )) : null}
 
-              {solarInsights?.boundingBox ? (
+              {visibleLayers.googleBoundary && solarInsights?.boundingBox ? (
                 <GoogleMapPolygon
                   path={boundsToPath(solarInsights.boundingBox)}
                   options={{
@@ -387,7 +482,7 @@ export function RoofReviewMap({
                 />
               ) : null}
 
-              {solarInsights?.roofSegments.map((segment) =>
+              {visibleLayers.roofSegments ? solarInsights?.roofSegments.map((segment) =>
                 segment.center ? (
                   <GoogleMapCircle
                     key={`review-segment-${segment.segmentIndex}`}
@@ -402,24 +497,43 @@ export function RoofReviewMap({
                     }}
                   />
                 ) : null,
-              )}
+              ) : null}
 
-              {solarInsights?.solarPanels.slice(0, 180).map((panel, index) => (
-                <GoogleMapCircle
-                  key={`review-panel-${panel.segmentIndex}-${index}`}
-                  center={{ lat: panel.center.latitude, lng: panel.center.longitude }}
-                  radius={panel.orientation === "LANDSCAPE" ? 0.95 : 0.8}
-                  options={{
-                    clickable: false,
-                    fillColor: "#14b8a6",
-                    fillOpacity: 0.78,
-                    strokeColor: "#f8fafc",
-                    strokeOpacity: 0.55,
-                    strokeWeight: 1,
-                    zIndex: 5,
-                  }}
-                />
-              ))}
+              {visibleLayers.panelArray ? (
+                <>
+                  {panelOverlay.outside.map((panel) => (
+                    <GoogleMapPolygon
+                      key={`review-panel-outside-${panel.id}`}
+                      path={panel.path}
+                      options={{
+                        clickable: false,
+                        fillColor: "#f59e0b",
+                        fillOpacity: 0.2,
+                        strokeColor: "#f59e0b",
+                        strokeOpacity: 0.45,
+                        strokeWeight: 1,
+                        zIndex: 4,
+                      }}
+                    />
+                  ))}
+
+                  {panelOverlay.inside.map((panel) => (
+                    <GoogleMapPolygon
+                      key={`review-panel-inside-${panel.id}`}
+                      path={panel.path}
+                      options={{
+                        clickable: false,
+                        fillColor: "#14b8a6",
+                        fillOpacity: 0.72,
+                        strokeColor: "#f8fafc",
+                        strokeOpacity: 0.72,
+                        strokeWeight: 1,
+                        zIndex: 5,
+                      }}
+                    />
+                  ))}
+                </>
+              ) : null}
 
               {solarInsights?.center ? (
                 <GoogleMapCircle
@@ -448,5 +562,35 @@ export function RoofReviewMap({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function LayerToggle({
+  active,
+  disabled,
+  label,
+  icon,
+  onClick,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  label: string;
+  icon?: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={
+        active
+          ? "inline-flex h-8 items-center justify-center gap-1.5 rounded-xl bg-slate-950 px-2 text-[11px] font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400"
+          : "inline-flex h-8 items-center justify-center gap-1.5 rounded-xl bg-slate-100 px-2 text-[11px] font-semibold text-slate-700 disabled:text-slate-400"
+      }
+    >
+      {icon}
+      <span className="truncate">{label}</span>
+    </button>
   );
 }

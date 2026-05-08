@@ -28,10 +28,30 @@ export function BomBreakdown({ result }: BomBreakdownProps) {
         <CardDescription>{copy.bom.description}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+          <div className="rounded-[1.35rem] border border-slate-950 bg-slate-950 p-5 text-white">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">BOM Cost</div>
+            <div className="mt-2 text-3xl font-semibold tracking-[-0.055em]">{formatCurrency(result.hardwareCostTHB)}</div>
+            <div className="mt-3 text-sm leading-6 text-white/62">
+              {result.bom.lineItems.length} line items · {categories.length} categories
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-[1.35rem] border border-border/70 bg-background p-5">
+              <div className="metric-label">{copy.quote.sellPrice}</div>
+              <div className="mt-2 text-2xl font-semibold">{formatCurrency(result.suggestedSellPriceTHB)}</div>
+            </div>
+            <div className="rounded-[1.35rem] border border-border/70 bg-background p-5">
+              <div className="metric-label">{copy.quote.netCustomerPrice}</div>
+              <div className="mt-2 text-2xl font-semibold">{formatCurrency(result.finance.financeAdjustedPriceTHB)}</div>
+            </div>
+          </div>
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {categories.map(([category, value]) => (
             <div key={category} className="rounded-[1.1rem] border border-border/70 bg-background p-4">
-              <div className="metric-label">{category}</div>
+              <div className="metric-label">{copy.bom.categories[category as keyof typeof copy.bom.categories] || category}</div>
               <div className="mt-2 text-xl font-semibold">{formatCurrency(value)}</div>
             </div>
           ))}
@@ -45,7 +65,7 @@ export function BomBreakdown({ result }: BomBreakdownProps) {
                 {groupedLineItems.map((group) => (
                   <div key={group.category} className="grid gap-3 rounded-[1.1rem] border border-border/60 p-3">
                     <div className="metric-label">
-                      {group.category}
+                      {copy.bom.categories[group.category as keyof typeof copy.bom.categories] || group.category}
                     </div>
                     <div className="grid gap-3">
                       {group.items.map((item) => (

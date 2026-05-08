@@ -41,6 +41,7 @@ export interface QuoteScenarioInput {
   map: MapSelectionSummary;
   topology: SystemTopology;
   pricingPresetId: PricingPreset["id"];
+  selectedTierId?: CapacityTier["id"] | null;
   selectedFinanceIds: string[];
   ftRateTHBPerKWh: number;
   selfConsumptionRatio: number;
@@ -69,6 +70,10 @@ export interface QuoteScenarioResult {
   quotedSystemSizeWp: number;
   systemSizeWp: number;
   annualGenerationKWh: number;
+  annualSelfUseKWh: number;
+  annualExportKWh: number;
+  annualSelfUseSavingsTHB: number;
+  annualExportRevenueTHB: number;
   annualSavingsTHB: number;
   hardwareCostTHB: number;
   suggestedSellPriceTHB: number;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Circle as GoogleMapCircle,
   DrawingManager,
@@ -8,8 +8,8 @@ import {
   Polygon as GoogleMapPolygon,
   useJsApiLoader,
 } from "@react-google-maps/api";
-import { LocateFixed, MapPin, RefreshCw, Search, Square, Trash2, Workflow } from "lucide-react";
-import { useAppCopy } from "@/components/locale-provider";
+import { LocateFixed, MapPin, Pentagon, RefreshCw, Search, Square, Trash2, Undo2 } from "lucide-react";
+import { useAppCopy, useLocaleContext } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ import { DEFAULT_MAP_CENTER, GOOGLE_MAP_LIBRARIES, createEmptyMapSelection } fro
 import { RUNTIME_FALLBACKS } from "@/lib/config/runtime-fallbacks";
 import { formatNumber } from "@/lib/utils";
 import { SOLAR_DEFAULTS } from "@/lib/config/solar";
-import type { SolarSelectionMatchSummary } from "@/lib/solar";
+import { buildGoogleSolarPanelFootprints, isSolarPointInsideSelection, type SolarSelectionMatchSummary } from "@/lib/solar";
 import type { MapSelectionSummary, RoofShape, ShapeKind } from "@/types/quote";
 import type { GoogleSolarSummary } from "@/types/solar";
 
@@ -111,6 +111,13 @@ function buildSelection(overlays: OverlayRecord[]): MapSelectionSummary {
 
 export function Map({ value, onChange, onCenterChange, solarInsights, solarSelectionMatch }: MapProps) {
   const copy = useAppCopy();
+  const { locale } = useLocaleContext();
+  const toolLabels =
+    locale === "zh"
+      ? { rectangle: "矩形", polygon: "多边形", pan: "拖动", undo: "撤销", clear: "清空" }
+      : locale === "th"
+        ? { rectangle: "สี่เหลี่ยม", polygon: "หลายเหลี่ยม", pan: "เลื่อน", undo: "ย้อนกลับ", clear: "ล้าง" }
+        : { rectangle: "Rectangle", polygon: "Polygon", pan: "Pan", undo: "Undo", clear: "Clear" };
   const googleMapsApiKey =
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || RUNTIME_FALLBACKS.googleMapsApiKey;
   const overlaysRef = useRef<OverlayRecord[]>([]);
@@ -125,7 +132,6 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
   const [mapCenter, setMapCenter] = useState(DEFAULT_MAP_CENTER);
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [drawMode, setDrawMode] = useState<ShapeKind | null>(null);
-  const [drawingExperience, setDrawingExperience] = useState<"quick" | "advanced">("quick");
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey,
@@ -163,13 +169,14 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
     );
   }, [drawMode]);
 
-  useEffect(() => {
-    if (drawingExperience === "quick" && drawMode === "polygon") {
-      setDrawMode(null);
-    }
-  }, [drawingExperience, drawMode]);
-
   const summary = value.grossAreaM2 > 0 ? value : createEmptyMapSelection();
+  const panelOverlay = useMemo(() => {
+    const panels = buildGoogleSolarPanelFootprints(solarInsights).slice(0, 220);
+    const inside = panels.filter((panel) => isSolarPointInsideSelection(panel.center, summary.shapes));
+    const outside = panels.filter((panel) => !isSolarPointInsideSelection(panel.center, summary.shapes));
+
+    return { inside, outside };
+  }, [solarInsights, summary.shapes]);
 
   const syncShapes = () => {
     onChange(buildSelection(overlaysRef.current));
@@ -377,7 +384,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             {copy.map.demoModeDescription}
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex h-[560px] flex-col gap-4">
+        <CardContent className="flex min-h-[420px] flex-col gap-4 sm:h-[560px]">
           <div className="rounded-[1.25rem] border border-border/70 bg-muted/40 p-4">
             <label className="mb-2 block text-sm font-medium">{copy.map.manualRoofArea}</label>
             <Input
@@ -398,7 +405,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
   if (!isLoaded) {
     return (
       <Card className="h-full">
-        <CardContent className="flex h-[560px] flex-col items-center justify-center gap-4 text-center">
+        <CardContent className="flex min-h-[420px] flex-col items-center justify-center gap-4 text-center sm:h-[560px]">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <RefreshCw className="size-4 animate-spin" />
             {copy.map.loadingMaps}
@@ -432,47 +439,12 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
 
   return (
     <Card className="h-full overflow-hidden">
-      <CardHeader className="border-b border-border/70">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <CardTitle>{copy.map.title}</CardTitle>
-            <CardDescription>{copy.map.description}</CardDescription>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={removeLast} disabled={summary.shapes.length === 0}>
-              <Trash2 data-icon="inline-start" />
-              {copy.map.undoLast}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={clearAll} disabled={summary.shapes.length === 0}>
-              {copy.map.clearAll}
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4 p-4 md:h-[680px] xl:h-[760px]">
-        <div className="rounded-[1.15rem] border border-border/70 bg-muted/20 p-3.5 sm:p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="section-kicker text-primary">{copy.map.toolsTitle}</div>
-              <p className="mt-1 text-sm text-muted-foreground">{copy.map.toolHint}</p>
-            </div>
-            <div className="hidden flex-wrap gap-2 sm:flex">
-              <div className="rounded-full border border-border/70 bg-background px-3 py-1.5 text-[11px] font-medium text-slate-700">
-                1. {copy.map.step1Title}
-              </div>
-              <div className="rounded-full border border-border/70 bg-background px-3 py-1.5 text-[11px] font-medium text-slate-700">
-                2. {copy.map.step2Title}
-              </div>
-              <div className="rounded-full border border-border/70 bg-background px-3 py-1.5 text-[11px] font-medium text-slate-700">
-                3. {copy.map.step3Title}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto]">
+      <CardContent className="flex flex-col gap-3 p-2 sm:p-4 md:h-[calc(100vh-250px)] md:min-h-[620px] xl:min-h-[720px]">
+        <div className="order-1 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
           <div className="grid gap-2">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+            <div className="grid grid-cols-2 gap-2 xl:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto_auto]">
               <Input
+                className="col-span-2 xl:col-span-1"
                 placeholder={copy.map.searchPlaceholder}
                 value={searchValue}
                 onChange={(event) => setSearchValue(event.target.value)}
@@ -491,7 +463,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
                 <LocateFixed data-icon="inline-start" />
                 {isLocating ? copy.map.locating : copy.map.useMyLocation}
               </Button>
-              <Button variant="ghost" size="sm" className="w-full sm:w-auto" onClick={handleUseCurrentMapCenter}>
+              <Button variant="ghost" size="sm" className="hidden w-full sm:inline-flex sm:w-auto" onClick={handleUseCurrentMapCenter}>
                 <MapPin data-icon="inline-start" />
                 {copy.map.useMapCenter}
               </Button>
@@ -499,11 +471,8 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             {locationStatus ? (
               <p className="text-sm text-muted-foreground">{locationStatus}</p>
             ) : null}
-            <p className="text-xs text-muted-foreground">
-              {copy.map.directGeocodeHint}
-            </p>
           </div>
-          <div className="grid grid-cols-2 gap-3 xl:contents">
+          <div className="hidden grid-cols-2 gap-3 sm:grid xl:contents">
             <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-2.5 text-sm">
               <div className="metric-label">{copy.map.grossArea}</div>
               <div className="metric-value mt-1">{formatNumber(summary.grossAreaM2, 1)} m²</div>
@@ -514,86 +483,68 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             </div>
           </div>
         </div>
-        <div className="rounded-[1.1rem] border border-border/70 bg-muted/20 p-3.5 sm:p-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-            <Workflow className="size-4 text-primary" />
-            {copy.map.toolsTitle}
-          </div>
-          <div className="mb-3 flex flex-wrap gap-2">
-            <Button
-              variant={drawingExperience === "quick" ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setDrawingExperience("quick");
-                setLocationStatus(copy.map.quickModeHint);
-              }}
-            >
-              {copy.map.quickMode}
-            </Button>
-            <Button
-              variant={drawingExperience === "advanced" ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setDrawingExperience("advanced");
-                setLocationStatus(copy.map.advancedModeHint);
-              }}
-            >
-              {copy.map.advancedMode}
-            </Button>
-          </div>
-          <div className="mb-3 text-sm text-muted-foreground">
-            {drawingExperience === "quick" ? copy.map.quickModeHint : copy.map.advancedModeHint}
-          </div>
+        <div className="order-2 rounded-xl border border-border/70 bg-muted/20 p-2.5 sm:p-3">
           <div className="flex flex-wrap gap-2">
             <Button
               variant={drawMode === "rectangle" ? "default" : "outline"}
               size="sm"
-              className="flex-1 sm:flex-none"
+              className="min-h-11 flex-1 text-xs leading-tight sm:min-h-0 sm:flex-none sm:text-sm"
               onClick={() => {
                 setDrawMode("rectangle");
                 setLocationStatus(copy.map.step2Body);
               }}
             >
               <Square data-icon="inline-start" />
-              {drawingExperience === "quick" ? copy.map.startRectangle : copy.map.rectangleTool}
+              {toolLabels.rectangle}
             </Button>
-            {drawingExperience === "advanced" ? (
-              <Button
-                variant={drawMode === "polygon" ? "default" : "outline"}
-                size="sm"
-                className="flex-1 sm:flex-none"
-                onClick={() => {
-                  setDrawMode("polygon");
-                  setLocationStatus(copy.map.step2Body);
-                }}
-              >
-                <MapPin data-icon="inline-start" />
-                {copy.map.polygonTool}
-              </Button>
-            ) : null}
+            <Button
+              variant={drawMode === "polygon" ? "default" : "outline"}
+              size="sm"
+              className="min-h-11 flex-1 text-xs leading-tight sm:min-h-0 sm:flex-none sm:text-sm"
+              onClick={() => {
+                setDrawMode("polygon");
+                setLocationStatus(copy.map.advancedModeHint);
+              }}
+            >
+              <Pentagon data-icon="inline-start" />
+              {toolLabels.polygon}
+            </Button>
             <Button
               variant={drawMode === null ? "secondary" : "ghost"}
               size="sm"
-              className="flex-1 sm:flex-none"
+              className="min-h-11 flex-1 text-xs leading-tight sm:min-h-0 sm:flex-none sm:text-sm"
               onClick={() => setDrawMode(null)}
             >
-              {copy.map.panTool}
+              {toolLabels.pan}
             </Button>
             {drawMode ? (
               <Button variant="ghost" size="sm" className="w-full sm:w-auto" onClick={() => setDrawMode(null)}>
                 {copy.map.doneDrawing}
               </Button>
             ) : null}
+            <Button variant="outline" size="sm" className="min-h-11 flex-1 text-xs leading-tight sm:min-h-0 sm:flex-none sm:text-sm" onClick={removeLast} disabled={summary.shapes.length === 0}>
+              <Undo2 data-icon="inline-start" />
+              {toolLabels.undo}
+            </Button>
+            <Button variant="ghost" size="sm" className="min-h-11 flex-1 text-xs leading-tight sm:min-h-0 sm:flex-none sm:text-sm" onClick={clearAll} disabled={summary.shapes.length === 0}>
+              <Trash2 data-icon="inline-start" />
+              {toolLabels.clear}
+            </Button>
           </div>
+          {drawMode ? (
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              {drawMode === "polygon" ? copy.map.advancedModeHint : copy.map.step2Body}
+            </p>
+          ) : null}
         </div>
-        <div className="relative min-h-[360px] flex-1 overflow-hidden rounded-[1.15rem] border border-border/70 sm:min-h-[420px] md:min-h-0">
+        <div className="relative order-3 h-[52vh] min-h-[360px] max-h-[560px] flex-none overflow-hidden rounded-[1.15rem] border border-border/70 sm:h-[58vh] sm:min-h-[520px] md:h-auto md:min-h-0 md:flex-1">
           <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-center gap-2 sm:inset-x-4 sm:top-4">
             <div className="rounded-full bg-background/92 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm">
               <MapPin className="mr-1 inline size-3.5" />
               {copy.map.satelliteEnabled}
             </div>
             <div className="hidden rounded-full bg-background/92 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm sm:block">
-              {summary.shapes.length > 0 ? copy.map.step3Body : drawingExperience === "quick" ? copy.map.quickModeHint : copy.map.advancedModeHint}
+              {summary.shapes.length > 0 ? copy.map.step3Body : copy.map.quickModeHint}
             </div>
             {solarInsights ? (
               <div className="rounded-full bg-background/92 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm">
@@ -654,10 +605,13 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
               map.setMapTypeId("satellite");
             }}
             options={{
-              mapTypeControl: true,
+              mapTypeControl: false,
               fullscreenControl: false,
               streetViewControl: false,
               tilt: 0,
+              gestureHandling: drawMode ? "none" : "greedy",
+              draggable: !drawMode,
+              disableDoubleClickZoom: Boolean(drawMode),
               }}
             >
               {solarInsights?.boundingBox ? (
@@ -691,17 +645,32 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
                 ) : null,
               )}
 
-              {solarInsights?.solarPanels.slice(0, 180).map((panel, index) => (
-                <GoogleMapCircle
-                  key={`panel-${panel.segmentIndex}-${index}`}
-                  center={{ lat: panel.center.latitude, lng: panel.center.longitude }}
-                  radius={panel.orientation === "LANDSCAPE" ? 0.95 : 0.8}
+              {panelOverlay.outside.map((panel) => (
+                <GoogleMapPolygon
+                  key={`panel-outside-${panel.id}`}
+                  path={panel.path}
+                  options={{
+                    clickable: false,
+                    fillColor: "#f59e0b",
+                    fillOpacity: 0.18,
+                    strokeColor: "#f59e0b",
+                    strokeOpacity: 0.42,
+                    strokeWeight: 1,
+                    zIndex: 3,
+                  }}
+                />
+              ))}
+
+              {panelOverlay.inside.map((panel) => (
+                <GoogleMapPolygon
+                  key={`panel-inside-${panel.id}`}
+                  path={panel.path}
                   options={{
                     clickable: false,
                     fillColor: "#14b8a6",
-                    fillOpacity: 0.78,
+                    fillOpacity: 0.72,
                     strokeColor: "#f8fafc",
-                    strokeOpacity: 0.55,
+                    strokeOpacity: 0.72,
                     strokeWeight: 1,
                     zIndex: 4,
                   }}

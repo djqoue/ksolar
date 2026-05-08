@@ -110,6 +110,17 @@ describe("google solar helpers", () => {
     expect(sellable.equivalentKw).toBe(8.45);
   });
 
+  it("re-runs Google roof-fit using the selected panel footprint and wattage", () => {
+    const sellable = getGoogleSolarSellableFit(baseSummary, {
+      areaM2: 2.583252,
+      powerWp: 550,
+    });
+
+    expect(sellable.layoutAreaM2).toBe(42);
+    expect(sellable.equivalentPanelCount).toBe(16);
+    expect(sellable.equivalentKw).toBe(8.8);
+  });
+
   it("flags under-sizing when Google roof-fit re-run with sellable modules exceeds the current quote", () => {
     const summary = buildSolarCrossCheckSummary(baseSummary, 3000);
 
@@ -127,6 +138,17 @@ describe("google solar helpers", () => {
     expect(summary.status).toBe("check-under-sizing");
     expect(summary.deltaKw).toBeCloseTo(4.45, 5);
     expect(summary.confidenceSummary).toContain("directional guidance");
+  });
+
+  it("tracks the selected panel wattage in the Google cross-check summary", () => {
+    const summary = buildSolarCrossCheckSummary(baseSummary, 4000, {
+      areaM2: 2.583252,
+      powerWp: 550,
+    });
+
+    expect(summary.sellableFitKw).toBe(8.8);
+    expect(summary.ksolarPanelPowerWp).toBe(550);
+    expect(summary.cautionSummary).toContain("550W");
   });
 
   it("marks Google Solar as matched when the nearest building center is inside the selected roof", () => {

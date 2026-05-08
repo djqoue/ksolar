@@ -103,6 +103,7 @@ export interface SolarAnnualFluxOverlay {
   maxFlux: number | null;
   meanFlux: number | null;
   roofPixelCount: number;
+  maskSource: "selected-roof" | "google-building";
 }
 
 export interface SolarMonthlyFluxSummary {
@@ -117,4 +118,14 @@ export interface SolarDataLayerAnalysis {
   annualFluxOverlay: SolarAnnualFluxOverlay | null;
   monthlyFlux: SolarMonthlyFluxSummary | null;
   hourlyShade: SolarHourlyShadeSummary | null;
+}
+
+export interface SolarPanelFootprint {
+  id: string;
+  center: SolarLatLng;
+  segmentIndex: number;
+  orientation: "LANDSCAPE" | "PORTRAIT";
+  yearlyEnergyDcKwh: number;
+  azimuthDegrees: number;
+  path: Array<{ lat: number; lng: number }>;
 }

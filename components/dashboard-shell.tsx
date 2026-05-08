@@ -1,7 +1,7 @@
 "use client";
 
 import { startTransition, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, CircleDashed, MapPinned, type LucideIcon, Settings2, Sparkles, WalletCards } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPinned, type LucideIcon, Settings2, Sparkles, WalletCards } from "lucide-react";
 import { LocaleProvider, useAppCopy, useLocaleContext } from "@/components/locale-provider";
 import { Map } from "@/components/Map";
 import { FinanceSelector } from "@/components/finance-selector";
@@ -14,8 +14,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { calculateQuoteScenario } from "@/lib/calc";
 import { FINANCE_PRODUCTS } from "@/lib/config/finance-products";
-import { DEFAULT_PANEL_ID } from "@/lib/config/panel-catalog";
-import { DEFAULT_TOPOLOGY, SOLAR_DEFAULTS } from "@/lib/config/solar";
+import { DEFAULT_PANEL_ID, findPanel, getPanelAreaM2 } from "@/lib/config/panel-catalog";
+import { CAPACITY_TIERS, DEFAULT_TOPOLOGY, SOLAR_DEFAULTS } from "@/lib/config/solar";
 import { getLocalizedPresetMeta, LANGUAGE_OPTIONS, type AppLocale } from "@/lib/i18n";
 import { createEmptyMapSelection } from "@/lib/maps";
 import { requestSolarDataLayers, requestSolarInsights } from "@/lib/solar-client";
@@ -24,10 +24,11 @@ import {
   getGoogleSolarSellableAnnualGeneration,
   getGoogleSolarSellableFit,
   getSelectionReferencePoint,
+  type SellablePanelProfile,
 } from "@/lib/solar";
-import { formatCurrency, formatNumber } from "@/lib/utils";
+import { formatNumber } from "@/lib/utils";
 import type { MapSelectionSummary, PricingPreset } from "@/types/quote";
-import type { SystemTopology } from "@/types/bom";
+import type { CapacityTierId, SystemTopology } from "@/types/bom";
 import type { GoogleSolarDataLayerPaths, GoogleSolarSummary, SolarLatLng } from "@/types/solar";
 
 type StepNumber = 1 | 2 | 3 | 4;
@@ -71,6 +72,7 @@ function DashboardShellContent() {
   const [selectedPanelId, setSelectedPanelId] = useState<string>(DEFAULT_PANEL_ID);
   const [selectedInverterId, setSelectedInverterId] = useState<string>("auto");
   const [selectedBatteryId, setSelectedBatteryId] = useState<string>("auto");
+  const [selectedTierId, setSelectedTierId] = useState<CapacityTierId | null>(null);
   const [selectedFinanceIds, setSelectedFinanceIds] = useState(
     FINANCE_PRODUCTS.filter((product) => product.enabledByDefault).map((product) => product.id),
   );
@@ -117,15 +119,27 @@ function DashboardShellContent() {
     () => buildSolarSelectionMatchSummary(mapSelection.shapes, activeSolarInsights),
     [activeSolarInsights, mapSelection.shapes],
   );
+  const selectedPanelProfile = useMemo<SellablePanelProfile>(() => {
+    const panel = findPanel(selectedPanelId) ?? findPanel(DEFAULT_PANEL_ID);
+
+    return {
+      powerWp: panel?.peakPowerW || SOLAR_DEFAULTS.panelPowerWp,
+      areaM2: getPanelAreaM2(panel) || SOLAR_DEFAULTS.panelAreaM2,
+    };
+  }, [selectedPanelId]);
 
   const result = useMemo(() => {
-    const googleSellableFit = getGoogleSolarSellableFit(activeSolarInsights);
-    const googleSellableAnnualGeneration = getGoogleSolarSellableAnnualGeneration(activeSolarInsights);
+    const googleSellableFit = getGoogleSolarSellableFit(activeSolarInsights, selectedPanelProfile);
+    const googleSellableAnnualGeneration = getGoogleSolarSellableAnnualGeneration(
+      activeSolarInsights,
+      selectedPanelProfile,
+    );
 
     return calculateQuoteScenario({
       map: mapSelection,
       topology,
       pricingPresetId,
+      selectedTierId,
       selectedFinanceIds,
       ftRateTHBPerKWh,
       selfConsumptionRatio,
@@ -144,14 +158,39 @@ function DashboardShellContent() {
     mapSelection,
     pricingPresetId,
     selectedFinanceIds,
+    selectedTierId,
     selfConsumptionRatio,
     activeSolarInsights,
     solarSelectionMatch.status,
     topology,
     selectedPanelId,
+    selectedPanelProfile,
     selectedInverterId,
     selectedBatteryId,
   ]);
+
+  const availableQuoteTiers = useMemo(
+    () =>
+      CAPACITY_TIERS.filter((tier) => {
+        const allowedByPhase =
+          topology.phase === "1P"
+            ? ["3kW", "5kW", "10kW"].includes(tier.id)
+            : ["5kW", "10kW", "15kW", "20kW"].includes(tier.id);
+
+        return allowedByPhase && tier.panelCount <= result.roofFitPanelCount;
+      }),
+    [result.roofFitPanelCount, topology.phase],
+  );
+
+  useEffect(() => {
+    if (!selectedTierId) {
+      return;
+    }
+
+    if (!availableQuoteTiers.some((tier) => tier.id === selectedTierId)) {
+      setSelectedTierId(null);
+    }
+  }, [availableQuoteTiers, selectedTierId]);
 
   const steps = useMemo<WorkflowStepState[]>(
     () => [
@@ -227,6 +266,12 @@ function DashboardShellContent() {
 
   const activeStepState = steps.find((step) => step.number === activeStep) ?? steps[0];
   const pricingMeta = getLocalizedPresetMeta(locale, pricingPresetId);
+  const stepShortLabels =
+    locale === "zh"
+      ? ["屋顶", "方案", "校验", "报价"]
+      : locale === "th"
+        ? ["หลังคา", "ระบบ", "ตรวจสอบ", "ราคา"]
+        : ["Roof", "System", "Check", "Quote"];
 
   const topologySummary = [
     topology.phase === "1P" ? copy.system.singlePhase : copy.system.threePhase,
@@ -259,34 +304,6 @@ function DashboardShellContent() {
           : "N/A",
     },
   ];
-
-  const headlineSizeLabel = activeStep === 4 ? copy.quote.quotedPackageSize : copy.quote.roofFitSize;
-  const headlineSizeValue =
-    activeStep === 4
-      ? result.quotedSystemSizeWp > 0
-        ? `${formatNumber(result.quotedSystemSizeWp / 1000, 2)} kWp`
-        : "N/A"
-      : result.roofFitSystemWp > 0
-        ? `${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp`
-        : "N/A";
-  const headlineOutcomeLabel = activeStep === 4 ? copy.workflow.netPrice : copy.quote.roofPotentialGeneration;
-  const headlineOutcomeValue =
-    activeStep === 4
-      ? result.finance.financeAdjustedPriceTHB
-        ? formatCurrency(result.finance.financeAdjustedPriceTHB)
-        : "N/A"
-      : result.roofPotentialAnnualGenerationKWh > 0
-        ? `${formatNumber(result.roofPotentialAnnualGenerationKWh)} kWh`
-        : "N/A";
-
-  const nextAction =
-    activeStep === 1
-      ? copy.workflow.nextActionMap
-      : activeStep === 2
-        ? copy.workflow.nextActionSystem
-        : activeStep === 3
-          ? copy.workflow.nextActionValidation
-          : copy.workflow.nextActionProposal;
 
   const fetchSolarData = async (requestPoint: SolarLatLng, requestKey: string) => {
     setSolarStatus("loading");
@@ -333,60 +350,6 @@ function DashboardShellContent() {
     }
   }, [solarRequestKey, solarRequestPoint]);
 
-  const activeChecklist = useMemo(() => {
-    const hasSolarValidation = activeSolarInsights !== null || mapCenter !== null || mapSelection.grossAreaM2 > 0;
-
-    return {
-      1: [
-        { label: copy.workflow.step1Check1, done: mapCenter !== null || mapSelection.grossAreaM2 > 0 },
-        { label: copy.workflow.step1Check2, done: mapSelection.grossAreaM2 > 0 },
-        { label: copy.workflow.step1Check3, done: mapSelection.usableAreaM2 > 0 },
-      ],
-      2: [
-        { label: copy.workflow.step2Check1, done: systemReviewed },
-        { label: copy.workflow.step2Check2, done: systemReviewed },
-        { label: copy.workflow.step2Check3, done: Boolean(pricingPresetId) },
-      ],
-      3: [
-        { label: copy.workflow.step3Check1, done: validationReviewed || ftRateTHBPerKWh > 0 },
-        { label: copy.workflow.step3Check2, done: validationReviewed || selectedFinanceIds.length > 0 },
-        { label: copy.workflow.step3Check3, done: hasSolarValidation },
-      ],
-      4: [
-        { label: copy.workflow.step4Check1, done: result.quotedSystemSizeWp > 0 && result.suggestedSellPriceTHB > 0 },
-        { label: copy.workflow.step4Check2, done: result.paybackYears !== null && result.irrPercent !== null },
-        { label: copy.workflow.step4Check3, done: Boolean(result.bom) },
-      ],
-    } satisfies Record<StepNumber, Array<{ label: string; done: boolean }>>;
-  }, [
-    copy.workflow.step1Check1,
-    copy.workflow.step1Check2,
-    copy.workflow.step1Check3,
-    copy.workflow.step2Check1,
-    copy.workflow.step2Check2,
-    copy.workflow.step2Check3,
-    copy.workflow.step3Check1,
-    copy.workflow.step3Check2,
-    copy.workflow.step3Check3,
-    copy.workflow.step4Check1,
-    copy.workflow.step4Check2,
-    copy.workflow.step4Check3,
-    ftRateTHBPerKWh,
-    mapCenter,
-    mapSelection.grossAreaM2,
-    mapSelection.usableAreaM2,
-    pricingPresetId,
-    result.bom,
-    result.irrPercent,
-    result.paybackYears,
-    result.suggestedSellPriceTHB,
-    result.quotedSystemSizeWp,
-    selectedFinanceIds.length,
-    activeSolarInsights,
-    systemReviewed,
-    validationReviewed,
-  ])[activeStep];
-
   const moveToStep = (step: StepNumber) => {
     const next = steps.find((item) => item.number === step);
     if (!next?.unlocked) {
@@ -419,105 +382,74 @@ function DashboardShellContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,rgba(250,250,250,1),rgba(245,246,247,1))]">
-      <section className="border-b border-border/70">
-        <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-4 py-4 sm:gap-5 sm:py-5 lg:px-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-3xl space-y-2">
-              <div className="inline-flex w-fit items-center rounded-full border border-border bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                {copy.header.badge}
+    <div className="ksolar-shell pb-24">
+      <header className="ksolar-topbar">
+        <div className="mx-auto flex max-w-[1180px] items-center justify-between gap-3 px-4 py-3 lg:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <BrandMark />
+            <div className="min-w-0">
+              <div className="text-[1.35rem] font-semibold leading-6 tracking-[-0.04em] text-slate-950 sm:text-[1.55rem]">
+                KSolar
               </div>
-              <h1 className="max-w-3xl text-balance text-[1.75rem] font-semibold leading-tight tracking-tight text-slate-900 sm:text-[2.2rem] md:text-[3rem]">
-                {copy.header.title}
-              </h1>
-              <p className="max-w-2xl text-sm leading-5 text-muted-foreground sm:leading-6">{copy.workflow.subtitle}</p>
-            </div>
-
-            <div className="surface-panel p-2 sm:self-start">
-              <div className="mb-2 px-2 section-kicker">
-                {copy.language.title}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {LANGUAGE_OPTIONS.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={locale === option.value ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => {
-                      startTransition(() => {
-                        setLocale(option.value);
-                      });
-                    }}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
+              <div className="mt-0.5 truncate text-xs font-medium text-muted-foreground">
+                {copy.workflow.stepLabel} {activeStep}/4 · {activeStepState.title}
               </div>
             </div>
           </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <HeroMetric label={copy.workflow.currentFocus} value={activeStepState.title} />
-            <HeroMetric label={copy.workflow.nextAction} value={nextAction} />
-            <HeroMetric label={headlineSizeLabel} value={headlineSizeValue} />
-            <HeroMetric label={headlineOutcomeLabel} value={headlineOutcomeValue} />
+          <div className="flex shrink-0 items-center gap-2">
+            {LANGUAGE_OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                variant={locale === option.value ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  startTransition(() => {
+                    setLocale(option.value);
+                  });
+                }}
+              >
+                {option.label}
+              </Button>
+            ))}
           </div>
         </div>
-      </section>
+      </header>
 
-      <main className="mx-auto max-w-[1180px] px-4 py-4 sm:py-5 lg:px-6">
-        <div className="grid gap-4">
-          <Card className="overflow-hidden">
-            <CardContent className="grid gap-4 pt-5">
-              <div className="h-1.5 rounded-full bg-muted/70">
-                <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {steps.map((step) => {
-                  const Icon = step.icon;
-                  const isActive = activeStep === step.number;
-                  return (
-                    <button
-                      key={step.number}
-                      type="button"
-                      disabled={!step.unlocked}
-                      onClick={() => moveToStep(step.number)}
-                      className={`workflow-item text-left ${
-                        isActive
-                          ? "border-primary/40 bg-primary/[0.03]"
-                          : step.done
-                            ? "border-accent/20 bg-accent/[0.04]"
-                            : step.unlocked
-                              ? "border-border/70 bg-background hover:border-primary/30"
-                              : "border-border/60 bg-muted/30 opacity-75"
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl sm:size-9 ${
-                            step.done ? "bg-accent text-accent-foreground" : step.unlocked ? step.tone : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          <Icon className="size-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="section-kicker">{copy.workflow.stepLabel} {step.number}</div>
-                          <div className="mt-1 text-sm font-semibold text-slate-900 sm:text-[15px]">{step.title}</div>
-                          <p className="mt-1 text-xs leading-4 text-muted-foreground sm:leading-5">
-                            {step.unlocked ? step.description : copy.workflow.lockedHint}
-                          </p>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+      <main className="mx-auto grid max-w-[1180px] gap-4 px-2.5 py-4 sm:gap-5 sm:px-4 sm:py-5 lg:px-6">
+        <div className="premium-panel p-3">
+          <div className="mb-3 h-1 rounded-full bg-muted/70">
+            <div
+              className="h-full rounded-full bg-[linear-gradient(90deg,#0f172a,#14b8a6,#fbbf24)] transition-all duration-500"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+            {steps.map((step, index) => {
+              const isActive = activeStep === step.number;
+              return (
+                <button
+                  key={step.number}
+                  type="button"
+                  disabled={!step.unlocked}
+                  onClick={() => moveToStep(step.number)}
+                  className={`relative overflow-hidden rounded-2xl border px-2 py-2.5 text-center text-xs font-semibold transition duration-300 sm:px-3 sm:py-3 ${
+                    isActive
+                      ? "border-slate-950 bg-slate-950 text-white shadow-[0_18px_42px_rgba(15,23,42,0.2)]"
+                      : step.done
+                        ? "border-accent/25 bg-accent/[0.07] text-slate-900"
+                        : step.unlocked
+                          ? "border-border/80 bg-white/80 text-slate-700 hover:border-slate-300 hover:bg-white"
+                          : "border-border bg-muted/40 text-muted-foreground"
+                  }`}
+                >
+                  {isActive ? <span className="absolute inset-x-3 top-0 h-px bg-[linear-gradient(90deg,transparent,#14b8a6,#fbbf24,transparent)]" /> : null}
+                  <span className="block text-[11px] opacity-70">{step.number}</span>
+                  <span className="block truncate text-[12px] sm:text-sm">{stepShortLabels[index]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
           {activeStep === 1 ? (
             <StageFrame
@@ -526,10 +458,13 @@ function DashboardShellContent() {
               tone={steps[0].tone}
               title={copy.workflow.step1Title}
               description={copy.workflow.step1Description}
+              signal={step1Done ? `${formatNumber(mapSelection.grossAreaM2, 1)} m²` : "SATELLITE"}
               footer={
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-muted-foreground">{copy.map.step3Body}</p>
-                  <Button disabled={!step1Done} size="lg" onClick={() => setActiveStep(2)}>
+                  <p className="text-sm font-medium text-slate-700">
+                    {step1Done ? `${copy.map.grossArea}: ${formatNumber(mapSelection.grossAreaM2, 1)} m²` : copy.map.step1Body}
+                  </p>
+                  <Button disabled={!step1Done} size="lg" className="min-w-[180px]" onClick={() => setActiveStep(2)}>
                     {copy.workflow.continue}
                     <ChevronRight className="size-4" />
                   </Button>
@@ -544,24 +479,10 @@ function DashboardShellContent() {
                   solarInsights={activeSolarInsights}
                   solarSelectionMatch={solarSelectionMatch}
                 />
-
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                  <StepChecklistPanel
-                    title={copy.workflow.doneWhen}
-                    readyLabel={copy.workflow.checklistReady}
-                    pendingLabel={copy.workflow.checklistPending}
-                    items={activeChecklist}
-                  />
-                  <Card className="bg-muted/20">
-                    <CardHeader className="pb-3">
-                      <CardTitle>{copy.workflow.projectSnapshot}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid gap-3">
-                      {roofSummaryItems.map((item) => (
-                        <MetricRow key={item.label} label={item.label} value={item.value} />
-                      ))}
-                    </CardContent>
-                  </Card>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {roofSummaryItems.slice(1, 4).map((item) => (
+                    <SimpleMetric key={item.label} label={item.label} value={item.value} />
+                  ))}
                 </div>
               </div>
             </StageFrame>
@@ -574,6 +495,7 @@ function DashboardShellContent() {
               tone={steps[1].tone}
               title={copy.workflow.step2Title}
               description={copy.workflow.step2Description}
+              signal={topologySummary}
               footer={
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <Button variant="outline" size="lg" onClick={() => setActiveStep(1)}>
@@ -582,6 +504,7 @@ function DashboardShellContent() {
                   </Button>
                   <Button
                     size="lg"
+                    className="min-w-[180px]"
                     onClick={() => {
                       setSystemReviewed(true);
                       setActiveStep(3);
@@ -593,26 +516,18 @@ function DashboardShellContent() {
                 </div>
               }
             >
-              <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-                <StepChecklistPanel
-                  title={copy.workflow.doneWhen}
-                  readyLabel={copy.workflow.checklistReady}
-                  pendingLabel={copy.workflow.checklistPending}
-                  items={activeChecklist}
-                />
-                <SystemSelector
-                  topology={topology}
-                  pricingPresetId={pricingPresetId}
-                  selectedPanelId={selectedPanelId}
-                  selectedInverterId={selectedInverterId}
-                  selectedBatteryId={selectedBatteryId}
-                  onTopologyChange={handleTopologyChange}
-                  onPricingPresetChange={handlePricingPresetChange}
-                  onPanelChange={setSelectedPanelId}
-                  onInverterChange={setSelectedInverterId}
-                  onBatteryChange={setSelectedBatteryId}
-                />
-              </div>
+              <SystemSelector
+                topology={topology}
+                pricingPresetId={pricingPresetId}
+                selectedPanelId={selectedPanelId}
+                selectedInverterId={selectedInverterId}
+                selectedBatteryId={selectedBatteryId}
+                onTopologyChange={handleTopologyChange}
+                onPricingPresetChange={handlePricingPresetChange}
+                onPanelChange={setSelectedPanelId}
+                onInverterChange={setSelectedInverterId}
+                onBatteryChange={setSelectedBatteryId}
+              />
             </StageFrame>
           ) : null}
 
@@ -623,6 +538,7 @@ function DashboardShellContent() {
               tone={steps[2].tone}
               title={copy.workflow.step3Title}
               description={copy.workflow.step3Description}
+              signal={activeSolarInsights ? "SOLAR READY" : "VERIFY"}
               footer={
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <Button variant="outline" size="lg" onClick={() => setActiveStep(2)}>
@@ -631,6 +547,7 @@ function DashboardShellContent() {
                   </Button>
                   <Button
                     size="lg"
+                    className="min-w-[180px]"
                     onClick={() => {
                       setValidationReviewed(true);
                       setActiveStep(4);
@@ -642,63 +559,7 @@ function DashboardShellContent() {
                 </div>
               }
             >
-              <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-                <div className="grid gap-4">
-                  <StepChecklistPanel
-                    title={copy.workflow.doneWhen}
-                    readyLabel={copy.workflow.checklistReady}
-                    pendingLabel={copy.workflow.checklistPending}
-                    items={activeChecklist}
-                  />
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>{copy.tariff.title}</CardTitle>
-                      <CardDescription>{copy.tariff.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-4">
-                      <div className="grid gap-2">
-                        <label className="text-sm font-medium">{copy.tariff.ftRate}</label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={ftRateTHBPerKWh}
-                          onChange={(event) => {
-                            setValidationReviewed(true);
-                            setFtRateTHBPerKWh(Number(event.target.value));
-                          }}
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <label className="text-sm font-medium">{copy.tariff.selfUseRatio}</label>
-                        <Input
-                          type="number"
-                          step="0.05"
-                          min="0"
-                          max="1"
-                          value={selfConsumptionRatio}
-                          onChange={(event) => {
-                            setValidationReviewed(true);
-                            setSelfConsumptionRatio(Number(event.target.value));
-                          }}
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <label className="text-sm font-medium">{copy.tariff.exportRate}</label>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          value={exportRateTHBPerKWh}
-                          onChange={(event) => {
-                            setValidationReviewed(true);
-                            setExportRateTHBPerKWh(Number(event.target.value));
-                          }}
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <FinanceSelector selectedFinanceIds={selectedFinanceIds} onChange={handleFinanceChange} />
-                </div>
-
+              <div className="grid gap-4">
                 <SolarInsightsCard
                   insights={activeSolarInsights}
                   status={solarStatus}
@@ -724,7 +585,55 @@ function DashboardShellContent() {
                   }}
                   quoteResult={result}
                   dataLayers={activeSolarDataLayers}
+                  sellablePanelProfile={selectedPanelProfile}
                 />
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{copy.tariff.title}</CardTitle>
+                    <CardDescription>{copy.tariff.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 sm:grid-cols-3">
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium">{copy.tariff.ftRate}</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={ftRateTHBPerKWh}
+                        onChange={(event) => {
+                          setValidationReviewed(true);
+                          setFtRateTHBPerKWh(Number(event.target.value));
+                        }}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium">{copy.tariff.selfUseRatio}</label>
+                      <Input
+                        type="number"
+                        step="0.05"
+                        min="0"
+                        max="1"
+                        value={selfConsumptionRatio}
+                        onChange={(event) => {
+                          setValidationReviewed(true);
+                          setSelfConsumptionRatio(Number(event.target.value));
+                        }}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium">{copy.tariff.exportRate}</label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={exportRateTHBPerKWh}
+                        onChange={(event) => {
+                          setValidationReviewed(true);
+                          setExportRateTHBPerKWh(Number(event.target.value));
+                        }}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+                <FinanceSelector selectedFinanceIds={selectedFinanceIds} onChange={handleFinanceChange} />
               </div>
             </StageFrame>
           ) : null}
@@ -736,6 +645,7 @@ function DashboardShellContent() {
               tone={steps[3].tone}
               title={copy.workflow.step4Title}
               description={copy.workflow.step4Description}
+              signal={result.quotedSystemSizeWp > 0 ? `${formatNumber(result.quotedSystemSizeWp / 1000, 1)} kWp` : "QUOTE"}
               footer={
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <Button variant="outline" size="lg" onClick={() => setActiveStep(3)}>
@@ -746,111 +656,72 @@ function DashboardShellContent() {
                 </div>
               }
             >
-              <div className="grid gap-4">
-                <StepChecklistPanel
-                  title={copy.workflow.doneWhen}
-                  readyLabel={copy.workflow.checklistReady}
-                  pendingLabel={copy.workflow.checklistPending}
-                  items={activeChecklist}
-                />
-                <QuoteResults
-                  result={result}
-                  solarInsights={activeSolarInsights}
-                  topologySummary={topologySummary}
-                  pricingPresetLabel={pricingMeta.label}
-                  financeSelectionCount={selectedFinanceIds.length}
-                />
-              </div>
+              <QuoteResults
+                result={result}
+                solarInsights={activeSolarInsights}
+                topologySummary={topologySummary}
+                pricingPresetLabel={pricingMeta.label}
+                financeSelectionCount={selectedFinanceIds.length}
+                sellablePanelProfile={selectedPanelProfile}
+                solarSelectionMatch={solarSelectionMatch}
+                availableQuoteTiers={availableQuoteTiers}
+                selectedTierId={selectedTierId}
+                onSelectedTierChange={setSelectedTierId}
+              />
             </StageFrame>
           ) : null}
-        </div>
       </main>
     </div>
   );
 }
 
-function StageFrame({ icon: Icon, stepNumber, tone, title, description, children, footer }: StageFrameProps) {
+function BrandMark() {
+  return (
+    <div className="ksolar-brand-mark" aria-hidden="true">
+      <span>K</span>
+    </div>
+  );
+}
+
+function StageFrame({ icon: Icon, stepNumber, tone, title, description, signal, children, footer }: StageFrameProps & { signal?: string }) {
   const copy = useAppCopy();
 
   return (
-    <section className="surface-panel overflow-hidden">
-      <div className="border-b border-border/60 p-4 sm:p-5 md:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <section className="surface-panel relative overflow-visible">
+      <div className="energy-line" />
+      <div className="border-b border-border/55 p-3.5 sm:p-5 md:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-4">
-            <div className={`flex size-10 items-center justify-center rounded-xl ${tone}`}>
+            <div className={`hidden size-10 items-center justify-center rounded-xl sm:flex ${tone}`}>
               <Icon className="size-4" />
             </div>
             <div>
               <div className="section-kicker text-primary">
                 {copy.workflow.stepLabel} {stepNumber}
               </div>
-              <h2 className="mt-1 text-[1.2rem] font-semibold leading-tight tracking-tight text-slate-900 sm:text-[1.4rem] md:text-[1.7rem]">{title}</h2>
-              <p className="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground sm:leading-6">{description}</p>
+              <h2 className="mt-1 text-[1.38rem] font-semibold leading-tight tracking-[-0.055em] text-slate-950 sm:text-[1.95rem] md:text-[2.45rem]">{title}</h2>
+              <p className="mt-1.5 max-w-2xl text-sm leading-5 text-muted-foreground sm:mt-2 sm:text-base sm:leading-7">{description}</p>
             </div>
+          </div>
+          <div className="hidden min-w-[160px] rounded-2xl border border-border/70 bg-slate-950 px-4 py-3 text-right text-white shadow-[0_18px_48px_rgba(15,23,42,0.18)] md:block">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/54">Live</div>
+            <div className="mt-1 truncate text-lg font-semibold tracking-[-0.03em]">{signal}</div>
           </div>
         </div>
       </div>
-      <div className="p-4 sm:p-5 md:p-6">{children}</div>
-      <div className="border-t border-border/60 p-4 sm:p-5 md:p-6">{footer}</div>
+      <div className="p-3 sm:p-5 md:p-6">{children}</div>
+      <div className="sticky bottom-0 z-20 border-t border-white/70 bg-white/90 p-4 shadow-[0_-18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:p-5 md:p-6">
+        {footer}
+      </div>
     </section>
   );
 }
 
-function MetricRow({ label, value }: { label: string; value: string }) {
+function SimpleMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div className="text-sm leading-5 text-muted-foreground">{label}</div>
-      <div className="text-right text-sm font-semibold leading-5 text-slate-900">{value}</div>
-    </div>
-  );
-}
-
-function HeroMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="surface-panel p-4">
+    <div className="rounded-2xl border border-white/80 bg-white/90 p-4 shadow-[0_12px_34px_rgba(15,23,42,0.045)] backdrop-blur">
       <div className="metric-label">{label}</div>
-      <div className="mt-2 text-sm font-semibold leading-5 text-slate-900 sm:leading-6">{value}</div>
+      <div className="mt-2 text-xl font-semibold tracking-tight text-slate-950">{value}</div>
     </div>
-  );
-}
-
-function StepChecklistPanel({
-  title,
-  readyLabel,
-  pendingLabel,
-  items,
-}: {
-  title: string;
-  readyLabel: string;
-  pendingLabel: string;
-  items: Array<{ label: string; done: boolean }>;
-}) {
-  const copy = useAppCopy();
-  const allDone = items.every((item) => item.done);
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{allDone ? readyLabel : pendingLabel}</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-2.5">
-        {items.map((item, index) => (
-          <div key={item.label} className="flex items-start gap-3 rounded-[0.9rem] border border-border/70 bg-background p-3.5">
-            <div
-              className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${
-                item.done ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {item.done ? <CheckCircle2 className="size-3.5" /> : <CircleDashed className="size-3.5" />}
-            </div>
-            <div className="min-w-0">
-              <div className="section-kicker">{copy.workflow.stepLabel} {index + 1}</div>
-              <div className="mt-1 text-sm leading-6 text-slate-700">{item.label}</div>
-            </div>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
   );
 }

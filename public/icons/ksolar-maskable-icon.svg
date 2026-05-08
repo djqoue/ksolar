@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">KSolar maskable app icon</title>
+  <desc id="desc">A safe-area version of the KSolar icon for home screen masks.</desc>
+  <rect width="512" height="512" fill="#0f766e"/>
+  <circle cx="370" cy="142" r="52" fill="#f7c948"/>
+  <path d="M128 196c0-18.8 15.2-34 34-34h144c18.8 0 34 15.2 34 34v14H128v-14Z" fill="#042f2e"/>
+  <path d="M116 224h270l-42 148H74l42-148Z" fill="#ecfeff"/>
+  <path d="M152 250h52l-10 34h-52l10-34Zm76 0h52l-10 34h-52l10-34Zm76 0h52l-10 34h-52l10-34ZM132 314h52l-10 34h-52l10-34Zm76 0h52l-10 34h-52l10-34Zm76 0h52l-10 34h-52l10-34Z" fill="#0f766e"/>
+  <path d="M374 406H88c-11 0-20-9-20-20s9-20 20-20h286c11 0 20 9 20 20s-9 20-20 20Z" fill="#042f2e"/>
+  <path d="M138 420h188c11 0 20 9 20 20s-9 20-20 20H138c-11 0-20-9-20-20s9-20 20-20Z" fill="#99f6e4"/>
+</svg>

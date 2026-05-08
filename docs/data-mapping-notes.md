@@ -21,6 +21,19 @@
 - If the workbook summary sheet and a detailed sheet disagree, the code now follows the detailed sheet totals because they are line-item traceable.
 - The reference workbook does not include a labor row, so `labor` remains `0` in the current catalog unless a later procurement source adds it.
 
+## Equipment catalog mapping
+
+- Panel, inverter, and battery catalogs are encoded as TypeScript constants rather than spreadsheet lookups.
+- Catalogs now serve two roles:
+  - commercial selection in the UI
+  - calculation inputs for module wattage, footprint, and BOM price overrides
+- The selected panel spec affects:
+  - roof-fit supported panel count
+  - roof-fit kWp
+  - quoted package kWp
+  - Google Solar normalization and cross-check
+- The selected inverter and battery affect BOM line-item model and cost, but do not yet change electrical topology rules.
+
 ## Market benchmarks
 
 - The benchmark workbook supplies market price corridors by package size.
@@ -31,3 +44,18 @@
 
 - Loan, installment, subsidy, and tax items are turned into typed config objects.
 - Interest rates and subsidy values are reference defaults only and are intended to be refined later by product owners.
+
+## Google Solar integration mapping
+
+- Google Solar is runtime API data, not an Excel source.
+- `buildingInsights` provides:
+  - roof geometry summaries
+  - array layouts
+  - panel wattage assumptions
+  - annual energy direction
+- `dataLayers` provides:
+  - building mask
+  - annual flux
+  - monthly flux
+  - hourly shade
+- KSolar clips Google raster layers against the user-drawn roof polygon before summarizing results, so the analysis follows the selected roof area instead of the full building mask.

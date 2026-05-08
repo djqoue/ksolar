@@ -61,9 +61,17 @@ export function calculateFinanceSelection(
 
   const taxCreditTHB = appliedProducts
     .filter((product) => product.type === "tax_credit")
+    .reduce((sum, product) => {
+      const deductionBaseTHB = Math.min(suggestedSellPriceTHB, product.maxSubsidyTHB || 0);
+      return sum + deductionBaseTHB * ((product.taxBenefitRatePercent || 0) / 100);
+    }, 0);
+
+  const taxDeductionBaseTHB = appliedProducts
+    .filter((product) => product.type === "tax_credit")
     .reduce((sum, product) => sum + Math.min(suggestedSellPriceTHB, product.maxSubsidyTHB || 0), 0);
 
-  const financeAdjustedPriceTHB = Math.max(0, suggestedSellPriceTHB - totalSubsidyTHB - taxCreditTHB);
+  const cashPriceAfterSubsidyTHB = Math.max(0, suggestedSellPriceTHB - totalSubsidyTHB);
+  const financeAdjustedPriceTHB = Math.max(0, cashPriceAfterSubsidyTHB - taxCreditTHB);
   const financeProduct = appliedProducts.find(
     (product) => product.type === "loan" || product.type === "installment",
   );
@@ -72,26 +80,43 @@ export function calculateFinanceSelection(
     return {
       appliedProducts,
       totalSubsidyTHB,
+      taxDeductionBaseTHB,
       taxCreditTHB,
+      cashPriceAfterSubsidyTHB,
       financeAdjustedPriceTHB,
+      downPaymentTHB: cashPriceAfterSubsidyTHB,
+      financedPrincipalTHB: 0,
+      annualLoanPaymentTHB: 0,
       totalInterestTHB: 0,
     };
   }
 
+  const loanToValueRatio = Math.min(1, Math.max(0, financeProduct.loanToValueRatio ?? 1));
+  const financedPrincipalTHB = cashPriceAfterSubsidyTHB * loanToValueRatio;
+  const downPaymentTHB = Math.max(0, cashPriceAfterSubsidyTHB - financedPrincipalTHB);
   const monthlyPaymentTHB = amortizedMonthlyPayment(
-    financeAdjustedPriceTHB,
+    financedPrincipalTHB,
     financeProduct.annualRatePercent || 0,
     financeProduct.termMonths,
   );
-  const totalInterestTHB = monthlyPaymentTHB * financeProduct.termMonths - financeAdjustedPriceTHB;
+  const totalInterestTHB = monthlyPaymentTHB * financeProduct.termMonths - financedPrincipalTHB;
 
   return {
     appliedProducts,
     totalSubsidyTHB,
+    taxDeductionBaseTHB,
     taxCreditTHB,
+    cashPriceAfterSubsidyTHB,
     financeAdjustedPriceTHB,
+    downPaymentTHB,
+    financedPrincipalTHB,
     monthlyPaymentTHB,
+    annualLoanPaymentTHB: monthlyPaymentTHB * 12,
     totalInterestTHB: Math.max(0, totalInterestTHB),
+    affordabilityNote:
+      financeProduct.loanToValueRatio === 1
+        ? "Modeled as up to 100% project financing. Bank approval, collateral value, fees, and customer credit profile are not guaranteed."
+        : undefined,
   };
 }
 
@@ -119,4 +144,3 @@ export function calculateProjectReturns(input: {
     irrPercent: irr === null ? null : irr * 100,
   };
 }
-

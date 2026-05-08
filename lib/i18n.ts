@@ -1,4 +1,3 @@
-import { SOLAR_DEFAULTS } from "@/lib/config/solar";
 import type { CalculationExplanation } from "@/types/quote";
 import type { GoogleSolarSummary } from "@/types/solar";
 import type { PricingPreset } from "@/types/quote";
@@ -215,6 +214,14 @@ export const APP_COPY = {
         "Google Solar is active for this site. The map base layer remains Google satellite imagery; the solar enhancement appears in the metrics below.",
       whatThisMeans: "What this means for the quote",
       decisionTitle: "Solar decision snapshot",
+      salesDecisionTitle: "Sales estimate",
+      salesEstimateNote: "Use this as a close field estimate. Detailed Google data stays below for backend calibration.",
+      estimateConfidence: "Confidence",
+      confidencePending: "Pending",
+      confidenceReview: "Needs roof review",
+      confidenceHigh: "High",
+      confidenceMedium: "Medium",
+      confidenceBase: "Directional",
       manualQuote: "Manual quote",
       googleEstimate: "Google estimate",
       googleRawLayout: "Google 400W reference",
@@ -251,6 +258,11 @@ export const APP_COPY = {
       quotedPackage: "Quoted package",
       roofSegmentsOverlay: "Roof segments",
       googlePanelsOverlay: "Google panel spots",
+      rawPanelPointNotice: "These are Google raw candidate panel points, not the final KSolar design.",
+      visibleGooglePanelPoints: (inside: number, total: number) => `${inside} of ${total} visible points are inside the selected roof.`,
+      dataLayerNoOverlap: "No clipped data",
+      reviewRoofBoundary: "Review roof boundary",
+      referenceOnlyGoogleBuilding: "Building-wide Google reference only",
       nearestBuilding: "Nearest Solar building",
       mapOverlayMatched: "Google Solar is matched to the selected roof.",
       mapOverlayPartial: "Google Solar only partially overlaps the selected roof.",
@@ -310,6 +322,15 @@ export const APP_COPY = {
       description:
         "Grouped hardware logic stays visible so sales, engineering, and finance can audit the same quote.",
       lineItems: "Line items",
+      categories: {
+        panel: "Panels",
+        inverter: "Inverter",
+        battery: "Battery",
+        mounting: "Mounting / structure",
+        electrical: "Electrical",
+        labor: "Labor",
+        other: "Other",
+      },
     },
     calc: {
       roofTitle: "Roof-to-capacity logic",
@@ -545,6 +566,14 @@ export const APP_COPY = {
       activeBanner: "当前地址已启用 Google Solar。底图仍然是 Google 卫星图，Solar 的增强信息会显示在下面这些指标里。",
       whatThisMeans: "这对报价意味着什么",
       decisionTitle: "Solar 快速判断",
+      salesDecisionTitle: "销售预估",
+      salesEstimateNote: "现场先看这组接近真实的预估值，详细 Google 数据留给后台校准和复核。",
+      estimateConfidence: "可信度",
+      confidencePending: "待分析",
+      confidenceReview: "需复核屋顶",
+      confidenceHigh: "高",
+      confidenceMedium: "中",
+      confidenceBase: "方向参考",
       manualQuote: "KSolar 报价",
       googleEstimate: "Google 估算",
       googleRawLayout: "Google 400W 参考值",
@@ -581,6 +610,11 @@ export const APP_COPY = {
       quotedPackage: "当前报价方案",
       roofSegmentsOverlay: "屋顶分段",
       googlePanelsOverlay: "Google 板位点",
+      rawPanelPointNotice: "这些是 Google 原始候选板位，不是 KSolar 最终排板效果图。",
+      visibleGooglePanelPoints: (inside: number, total: number) => `${total} 个 Google 点位中，${inside} 个落在圈选屋顶内。`,
+      dataLayerNoOverlap: "圈选区域无有效数据",
+      reviewRoofBoundary: "先复核屋顶边界",
+      referenceOnlyGoogleBuilding: "仅作 Google 整栋建筑参考",
       nearestBuilding: "Google 最近建筑",
       mapOverlayMatched: "当前 Google Solar 已匹配到你圈选的屋顶。",
       mapOverlayPartial: "当前 Google Solar 只与您圈选的屋顶部分重叠。",
@@ -638,6 +672,15 @@ export const APP_COPY = {
       title: "BOM 拆解",
       description: "把硬件逻辑按分类展开，销售、工程和财务可以基于同一份报价一起复核。",
       lineItems: "明细项",
+      categories: {
+        panel: "光伏组件",
+        inverter: "逆变器",
+        battery: "电池",
+        mounting: "支架 / 结构件",
+        electrical: "电气材料",
+        labor: "人工",
+        other: "其他",
+      },
     },
     calc: {
       roofTitle: "面积到容量逻辑",
@@ -870,6 +913,14 @@ export const APP_COPY = {
       activeBanner: "เปิดใช้ Google Solar สำหรับไซต์นี้แล้ว แผนที่พื้นหลังยังเป็นภาพดาวเทียมของ Google และข้อมูล Solar จะปรากฏในตัวเลขด้านล่าง",
       whatThisMeans: "สิ่งนี้มีความหมายต่อใบเสนอราคาอย่างไร",
       decisionTitle: "สรุปเพื่อการตัดสินใจ",
+      salesDecisionTitle: "ประมาณการสำหรับฝ่ายขาย",
+      salesEstimateNote: "ใช้ชุดตัวเลขนี้เป็นประมาณการหน้างาน รายละเอียดจาก Google เก็บไว้ให้หลังบ้านตรวจและปรับเทียบ",
+      estimateConfidence: "ความน่าเชื่อถือ",
+      confidencePending: "รอวิเคราะห์",
+      confidenceReview: "ต้องตรวจหลังคา",
+      confidenceHigh: "สูง",
+      confidenceMedium: "ปานกลาง",
+      confidenceBase: "ใช้เป็นแนวทาง",
       manualQuote: "ราคา KSolar",
       googleEstimate: "ประมาณการ Google",
       googleRawLayout: "ค่าอ้างอิง Google 400W",
@@ -906,6 +957,11 @@ export const APP_COPY = {
       quotedPackage: "แพ็กเกจที่กำลังเสนอ",
       roofSegmentsOverlay: "ส่วนของหลังคา",
       googlePanelsOverlay: "ตำแหน่งแผงของ Google",
+      rawPanelPointNotice: "จุดเหล่านี้เป็นตำแหน่งแผงดิบจาก Google ไม่ใช่แบบวางแผงสุดท้ายของ KSolar",
+      visibleGooglePanelPoints: (inside: number, total: number) => `${inside} จาก ${total} จุดอยู่ในหลังคาที่เลือก`,
+      dataLayerNoOverlap: "ไม่มีข้อมูลในพื้นที่ที่ตัดแล้ว",
+      reviewRoofBoundary: "ตรวจขอบเขตหลังคาก่อน",
+      referenceOnlyGoogleBuilding: "ใช้อ้างอิงระดับอาคารจาก Google เท่านั้น",
       nearestBuilding: "อาคารที่ Google Solar จับได้",
       mapOverlayMatched: "Google Solar จับคู่กับหลังคาที่คุณเลือกแล้ว",
       mapOverlayPartial: "Google Solar ซ้อนทับกับหลังคาที่เลือกเพียงบางส่วน",
@@ -963,6 +1019,15 @@ export const APP_COPY = {
       title: "สรุป BOM",
       description: "ทำให้ตรรกะฮาร์ดแวร์มองเห็นได้ เพื่อให้ฝ่ายขาย วิศวกรรม และการเงินตรวจสอบ quote เดียวกันได้",
       lineItems: "รายการย่อย",
+      categories: {
+        panel: "แผง",
+        inverter: "อินเวอร์เตอร์",
+        battery: "แบตเตอรี่",
+        mounting: "โครงยึด / โครงสร้าง",
+        electrical: "อุปกรณ์ไฟฟ้า",
+        labor: "ค่าแรง",
+        other: "อื่นๆ",
+      },
     },
     calc: {
       roofTitle: "ตรรกะจากหลังคาสู่กำลังติดตั้ง",
@@ -1142,14 +1207,15 @@ export function getLocalizedSolarUsageSummary(locale: AppLocale, fallback: strin
 export function getLocalizedSolarCautionSummary(
   locale: AppLocale,
   insights: GoogleSolarSummary,
+  sellablePanelPowerWp: number,
   fallback: string,
 ) {
   if (locale === "zh") {
-    return `Google Solar 当前按约 ${insights.panelCapacityWatts}W 组件建模，而 KSolar 当前规则按 ${SOLAR_DEFAULTS.panelPowerWp}W 组件测算。先看同口径换算结果，再决定是否调大或调小方案。`;
+    return `Google Solar 当前按约 ${insights.panelCapacityWatts}W 组件建模，而 KSolar 当前规则按 ${sellablePanelPowerWp}W 组件测算。先看同口径换算结果，再决定是否调大或调小方案。`;
   }
 
   if (locale === "th") {
-    return `Google Solar คำนวณจากแผงประมาณ ${insights.panelCapacityWatts}W ขณะที่กฎของ KSolar ตอนนี้ใช้แผง ${SOLAR_DEFAULTS.panelPowerWp}W ควรดูค่าที่แปลงเป็นสเปกเดียวกันก่อนตัดสินว่าระบบใหญ่หรือเล็กเกินไป`;
+    return `Google Solar คำนวณจากแผงประมาณ ${insights.panelCapacityWatts}W ขณะที่กฎของ KSolar ตอนนี้ใช้แผง ${sellablePanelPowerWp}W ควรดูค่าที่แปลงเป็นสเปกเดียวกันก่อนตัดสินว่าระบบใหญ่หรือเล็กเกินไป`;
   }
 
   return fallback;

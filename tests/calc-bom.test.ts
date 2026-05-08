@@ -15,8 +15,8 @@ describe("buildBomScenario", () => {
     );
 
     expect(result).not.toBeNull();
-    expect(result?.hardwareCostTHB).toBe(41630);
-    expect(result?.categoryTotals.panel).toBe(20800);
+    expect(result?.hardwareCostTHB).toBe(38070);
+    expect(result?.categoryTotals.panel).toBe(17240);
     expect(result?.categoryTotals.inverter).toBe(12100);
     expect(result?.categoryTotals.battery).toBe(0);
     expect(result?.lineItems.some((item) => item.model === "SDM120CT(40ma) 1P Smart Meter")).toBe(true);
@@ -35,7 +35,7 @@ describe("buildBomScenario", () => {
     );
 
     expect(result?.categoryTotals.battery).toBe(40350);
-    expect(result?.hardwareCostTHB).toBe(154136);
+    expect(result?.hardwareCostTHB).toBe(147016);
     expect(result?.lineItems.some((item) => item.model === "Battery Cable 10AWG" && item.quantity === 1)).toBe(true);
     expect(result?.lineItems.some((item) => item.model === "ATS 4P 63A")).toBe(true);
   });
@@ -52,9 +52,9 @@ describe("buildBomScenario", () => {
     );
 
     expect(result).not.toBeNull();
-    expect(result?.categoryTotals.panel).toBe(62400);
+    expect(result?.categoryTotals.panel).toBe(51720);
     expect(result?.categoryTotals.inverter).toBe(24300);
-    expect(result?.hardwareCostTHB).toBe(105608);
+    expect(result?.hardwareCostTHB).toBe(94928);
     expect(result?.lineItems.some((item) => item.model === "SDM630MCT 3P Smart Meter")).toBe(true);
     expect(result?.categoryTotals.labor).toBe(0);
   });

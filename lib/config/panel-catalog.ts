@@ -1817,5 +1817,13 @@ export function findPanel(id: string): PanelSpec | undefined {
   return PANEL_CATALOG.find(p => p.id === id);
 }
 
+export function getPanelAreaM2(panel?: Pick<PanelSpec, "dimLong" | "dimShort"> | null): number {
+  if (!panel || panel.dimLong <= 0 || panel.dimShort <= 0) {
+    return 0;
+  }
+
+  return (panel.dimLong * panel.dimShort) / 1_000_000;
+}
+
 /** Panels that have a price listed (priceCNY !== null) */
 export const PRICED_PANELS: PanelSpec[] = PANEL_CATALOG.filter(p => p.priceCNY !== null);

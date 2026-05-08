@@ -1,6 +1,18 @@
 import { SOLAR_DEFAULTS } from "@/lib/config/solar";
 import type { RoofShape } from "@/types/quote";
-import type { GoogleSolarSummary, SolarLatLng } from "@/types/solar";
+import type { GoogleSolarSummary, SolarLatLng, SolarPanelFootprint } from "@/types/solar";
+
+export interface SellablePanelProfile {
+  areaM2: number;
+  powerWp: number;
+}
+
+function resolveSellablePanelProfile(profile?: Partial<SellablePanelProfile>): SellablePanelProfile {
+  return {
+    areaM2: profile?.areaM2 && profile.areaM2 > 0 ? profile.areaM2 : SOLAR_DEFAULTS.panelAreaM2,
+    powerWp: profile?.powerWp && profile.powerWp > 0 ? profile.powerWp : SOLAR_DEFAULTS.panelPowerWp,
+  };
+}
 
 export function centroidFromPath(path: Array<{ lat: number; lng: number }>): SolarLatLng | null {
   if (path.length === 0) {
@@ -82,6 +94,18 @@ function isPointInsidePath(
   return inside;
 }
 
+export function isSolarPointInsideSelection(
+  point: SolarLatLng,
+  shapes: RoofShape[],
+) {
+  const geospatialShapes = shapes.filter((shape) => shape.path.length > 0);
+  if (geospatialShapes.length === 0) {
+    return false;
+  }
+
+  return geospatialShapes.some((shape) => isPointInsidePath(point, shape.path));
+}
+
 function getDistanceMeters(a: SolarLatLng, b: SolarLatLng) {
   const earthRadius = 6371000;
   const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
@@ -156,9 +180,7 @@ export function buildSolarSelectionMatchSummary(
   }
 
   const selectionContainsPoint = (point: SolarLatLng) =>
-    geospatialShapes.some((shape) =>
-      isPointInsidePath(point, shape.path),
-    );
+    isSolarPointInsideSelection(point, geospatialShapes);
 
   const samplePoints =
     solarSummary?.solarPanels.length
@@ -241,6 +263,7 @@ export function getGoogleSolarRecommendedKw(
 
 export function getGoogleSolarNormalizedEquivalent(
   insights?: GoogleSolarSummary | null,
+  profile?: Partial<SellablePanelProfile>,
 ): {
   equivalentKw: number | null;
   equivalentPanelCount: number | null;
@@ -255,8 +278,9 @@ export function getGoogleSolarNormalizedEquivalent(
     };
   }
 
+  const sellablePanel = resolveSellablePanelProfile(profile);
   const googlePanelAreaM2 = insights.panelHeightMeters * insights.panelWidthMeters;
-  if (googlePanelAreaM2 <= 0 || SOLAR_DEFAULTS.panelAreaM2 <= 0) {
+  if (googlePanelAreaM2 <= 0 || sellablePanel.areaM2 <= 0) {
     return {
       equivalentKw: null,
       equivalentPanelCount: null,
@@ -265,12 +289,12 @@ export function getGoogleSolarNormalizedEquivalent(
   }
 
   const layoutAreaM2 = roofFitConfig.panelsCount * googlePanelAreaM2;
-  const equivalentPanelCount = Math.floor(layoutAreaM2 / SOLAR_DEFAULTS.panelAreaM2);
+  const equivalentPanelCount = Math.floor(layoutAreaM2 / sellablePanel.areaM2);
 
   return {
     equivalentKw:
       equivalentPanelCount > 0
-        ? (equivalentPanelCount * SOLAR_DEFAULTS.panelPowerWp) / 1000
+        ? (equivalentPanelCount * sellablePanel.powerWp) / 1000
         : 0,
     equivalentPanelCount,
     layoutAreaM2,
@@ -279,6 +303,7 @@ export function getGoogleSolarNormalizedEquivalent(
 
 export function getGoogleSolarSellableFit(
   insights?: GoogleSolarSummary | null,
+  profile?: Partial<SellablePanelProfile>,
 ): {
   equivalentKw: number | null;
   equivalentPanelCount: number | null;
@@ -292,14 +317,15 @@ export function getGoogleSolarSellableFit(
     };
   }
 
+  const sellablePanel = resolveSellablePanelProfile(profile);
   const equivalentPanelCount = Math.floor(
-    insights.maxArrayAreaMeters2 / SOLAR_DEFAULTS.panelAreaM2,
+    insights.maxArrayAreaMeters2 / sellablePanel.areaM2,
   );
 
   return {
     equivalentKw:
       equivalentPanelCount > 0
-        ? (equivalentPanelCount * SOLAR_DEFAULTS.panelPowerWp) / 1000
+        ? (equivalentPanelCount * sellablePanel.powerWp) / 1000
         : 0,
     equivalentPanelCount,
     layoutAreaM2: insights.maxArrayAreaMeters2,
@@ -308,6 +334,7 @@ export function getGoogleSolarSellableFit(
 
 export function getGoogleSolarSellableAnnualGeneration(
   insights?: GoogleSolarSummary | null,
+  profile?: Partial<SellablePanelProfile>,
 ): number | null {
   const roofFitConfig = insights?.maxConfig ?? insights?.recommendedConfig;
   if (!roofFitConfig || roofFitConfig.yearlyEnergyDcKwh <= 0 || !insights) {
@@ -315,7 +342,7 @@ export function getGoogleSolarSellableAnnualGeneration(
   }
 
   const googleRawKw = getGoogleSolarRecommendedKw(insights);
-  const sellableFit = getGoogleSolarSellableFit(insights);
+  const sellableFit = getGoogleSolarSellableFit(insights, profile);
   const targetKw = sellableFit.equivalentKw;
 
   if (!googleRawKw || !targetKw || googleRawKw <= 0 || targetKw <= 0) {
@@ -328,10 +355,12 @@ export function getGoogleSolarSellableAnnualGeneration(
 export function buildSolarCrossCheckSummary(
   insights: GoogleSolarSummary,
   roofFitSystemWp: number,
+  profile?: Partial<SellablePanelProfile>,
 ): SolarCrossCheckSummary {
+  const sellablePanel = resolveSellablePanelProfile(profile);
   const googleRawKw = getGoogleSolarRecommendedKw(insights);
-  const sellableFit = getGoogleSolarSellableFit(insights);
-  const normalizedEquivalent = getGoogleSolarNormalizedEquivalent(insights);
+  const sellableFit = getGoogleSolarSellableFit(insights, sellablePanel);
+  const normalizedEquivalent = getGoogleSolarNormalizedEquivalent(insights, sellablePanel);
   const googleRecommendedKw =
     sellableFit.equivalentKw ?? normalizedEquivalent.equivalentKw ?? googleRawKw;
   const manualKw = roofFitSystemWp / 1000;
@@ -368,7 +397,7 @@ export function buildSolarCrossCheckSummary(
 
   const cautionSummary =
     insights.panelCapacityWatts > 0
-      ? `Google Solar is modeling around ${insights.panelCapacityWatts}W panels, but the primary comparison here is re-run with your ${SOLAR_DEFAULTS.panelPowerWp}W sellable module. Treat Google's raw layout as a reference, not the sales baseline.`
+      ? `Google Solar is modeling around ${insights.panelCapacityWatts}W panels, but the primary comparison here is re-run with your ${sellablePanel.powerWp}W sellable module. Treat Google's raw layout as a reference, not the sales baseline.`
       : "Capacity differences can come from panel wattage assumptions, layout spacing, or setbacks.";
 
   return {
@@ -379,7 +408,7 @@ export function buildSolarCrossCheckSummary(
     normalizedEquivalentKw: normalizedEquivalent.equivalentKw,
     normalizedEquivalentPanelCount: normalizedEquivalent.equivalentPanelCount,
     googleLayoutAreaM2: sellableFit.layoutAreaM2 ?? normalizedEquivalent.layoutAreaM2,
-    ksolarPanelPowerWp: SOLAR_DEFAULTS.panelPowerWp,
+    ksolarPanelPowerWp: sellablePanel.powerWp,
     manualKw,
     deltaKw,
     status,
@@ -388,4 +417,89 @@ export function buildSolarCrossCheckSummary(
     usageSummary,
     cautionSummary,
   };
+}
+
+function offsetLatLngMeters(
+  center: SolarLatLng,
+  eastMeters: number,
+  northMeters: number,
+): SolarLatLng {
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLng =
+    metersPerDegreeLat * Math.cos((center.latitude * Math.PI) / 180);
+
+  return {
+    latitude: center.latitude + northMeters / metersPerDegreeLat,
+    longitude: center.longitude + eastMeters / (metersPerDegreeLng || metersPerDegreeLat),
+  };
+}
+
+function panelCornersFromCenter(input: {
+  center: SolarLatLng;
+  azimuthDegrees: number;
+  orientation: "LANDSCAPE" | "PORTRAIT";
+  panelHeightMeters: number;
+  panelWidthMeters: number;
+}) {
+  const azimuthRadians = (input.azimuthDegrees * Math.PI) / 180;
+  const alongMeters =
+    input.orientation === "LANDSCAPE" ? input.panelWidthMeters : input.panelHeightMeters;
+  const acrossMeters =
+    input.orientation === "LANDSCAPE" ? input.panelHeightMeters : input.panelWidthMeters;
+
+  const alongEast = Math.sin(azimuthRadians);
+  const alongNorth = Math.cos(azimuthRadians);
+  const acrossEast = Math.sin(azimuthRadians + Math.PI / 2);
+  const acrossNorth = Math.cos(azimuthRadians + Math.PI / 2);
+
+  const corners = [
+    { along: -alongMeters / 2, across: -acrossMeters / 2 },
+    { along: alongMeters / 2, across: -acrossMeters / 2 },
+    { along: alongMeters / 2, across: acrossMeters / 2 },
+    { along: -alongMeters / 2, across: acrossMeters / 2 },
+  ];
+
+  return corners.map((corner) =>
+    offsetLatLngMeters(
+      input.center,
+      corner.along * alongEast + corner.across * acrossEast,
+      corner.along * alongNorth + corner.across * acrossNorth,
+    ),
+  );
+}
+
+export function buildGoogleSolarPanelFootprints(
+  insights?: GoogleSolarSummary | null,
+): SolarPanelFootprint[] {
+  if (!insights || insights.panelHeightMeters <= 0 || insights.panelWidthMeters <= 0) {
+    return [];
+  }
+
+  const segmentAzimuth = new Map(
+    insights.roofSegments.map((segment) => [segment.segmentIndex, segment.azimuthDegrees]),
+  );
+
+  return insights.solarPanels.map((panel, index) => {
+    const azimuthDegrees = segmentAzimuth.get(panel.segmentIndex) ?? 180;
+    const corners = panelCornersFromCenter({
+      center: panel.center,
+      azimuthDegrees,
+      orientation: panel.orientation,
+      panelHeightMeters: insights.panelHeightMeters,
+      panelWidthMeters: insights.panelWidthMeters,
+    });
+
+    return {
+      id: `google-panel-${panel.segmentIndex}-${index}`,
+      center: panel.center,
+      segmentIndex: panel.segmentIndex,
+      orientation: panel.orientation,
+      yearlyEnergyDcKwh: panel.yearlyEnergyDcKwh,
+      azimuthDegrees,
+      path: corners.map((corner) => ({
+        lat: corner.latitude,
+        lng: corner.longitude,
+      })),
+    };
+  });
 }

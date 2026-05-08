@@ -6,11 +6,16 @@ import type { CalculationExplanation } from "@/types/quote";
 export function buildCalculationExplanation(input: {
   grossAreaM2: number;
   usableAreaM2: number;
+  panelAreaM2: number;
+  panelPowerWp: number;
   panelCount: number;
+  quotedPanelCount: number;
   systemSizeWp: number;
   roofPotentialAnnualGenerationKWh: number;
   quotedSystemSizeWp: number;
   annualGenerationKWh: number;
+  annualSelfUseSavingsTHB: number;
+  annualExportRevenueTHB: number;
   annualSavingsTHB: number;
   selfConsumptionRatio: number;
   retailRateTHBPerKWh: number;
@@ -30,9 +35,12 @@ export function buildCalculationExplanation(input: {
       metrics: {
         "Gross area (m²)": formatNumber(input.grossAreaM2, 1),
         "Usable area (m²)": formatNumber(input.usableAreaM2, 1),
-        "Supported panels": input.panelCount,
+        "Selected panel footprint": `${formatNumber(input.panelAreaM2, 2)} m²`,
+        "Selected panel power": `${formatNumber(input.panelPowerWp)} W`,
+        "Roof-fit supported panels": input.panelCount,
         "Roof-fit size": `${formatNumber(input.systemSizeWp / 1000, 2)} kWp`,
         "Roof-potential generation": `${formatNumber(input.roofPotentialAnnualGenerationKWh)} kWh`,
+        "Quoted package panels": input.quotedPanelCount,
         "Quoted package size": `${formatNumber(input.quotedSystemSizeWp / 1000, 2)} kWp`,
       },
     },
@@ -46,6 +54,8 @@ export function buildCalculationExplanation(input: {
         "Retail rate": `${formatNumber(input.retailRateTHBPerKWh, 2)} THB/kWh`,
         "Self-use ratio": formatPercent(input.selfConsumptionRatio * 100),
         "Export rate": `${formatNumber(input.exportRateTHBPerKWh, 2)} THB/kWh`,
+        "Self-use savings": formatCurrency(input.annualSelfUseSavingsTHB),
+        "Export revenue": formatCurrency(input.annualExportRevenueTHB),
         "Annual bill savings": formatCurrency(input.annualSavingsTHB),
       },
     },
@@ -67,8 +77,11 @@ export function buildCalculationExplanation(input: {
       description: "Subsidies and tax benefits reduce customer capex. Financing is surfaced separately so affordability does not distort base project ROI.",
       metrics: {
         "Applied subsidy": formatCurrency(input.finance.totalSubsidyTHB),
-        "Tax deduction": formatCurrency(input.finance.taxCreditTHB),
-        "Net customer price": formatCurrency(input.finance.financeAdjustedPriceTHB),
+        "Tax deduction base": formatCurrency(input.finance.taxDeductionBaseTHB),
+        "Estimated tax benefit": formatCurrency(input.finance.taxCreditTHB),
+        "Effective customer cost": formatCurrency(input.finance.financeAdjustedPriceTHB),
+        "Down payment estimate": formatCurrency(input.finance.downPaymentTHB),
+        "Financed principal": formatCurrency(input.finance.financedPrincipalTHB),
         "Monthly payment": input.finance.monthlyPaymentTHB
           ? formatCurrency(input.finance.monthlyPaymentTHB)
           : "N/A",

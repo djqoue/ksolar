@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { useAppCopy, useLocaleContext } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BATTERY_CATALOG, findBattery } from "@/lib/config/battery-catalog";
 import { filterResidentialInverters, findInverter } from "@/lib/config/inverter-catalog";
 import { DEFAULT_PANEL_ID, findPanel, PRICED_PANELS } from "@/lib/config/panel-catalog";
@@ -132,7 +132,6 @@ export function SystemSelector({
               {copy.system.threePhase}
             </TabsTrigger>
           </TabsList>
-          <TabsContent value={topology.phase} className="space-y-0" />
         </Tabs>
 
         {/* ── Mode buttons ─────────────────────────────────────────────── */}
@@ -218,118 +217,134 @@ export function SystemSelector({
           </div>
         </div>
 
-        {/* ── Panel selection ──────────────────────────────────────────── */}
-        <div className="rounded-[1.1rem] border border-border/70 p-4">
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-            <SunMedium className="size-4 text-primary" />
-            {zh ? "面板选型" : "Panel Selection"}
-          </div>
-          <p className="mb-3 text-sm text-muted-foreground">
-            {zh
-              ? "从 iSolarBP 物料库选择组件，报价单价格自动更新。"
-              : "Pick a module from the iSolarBP catalog — BOM price updates instantly."}
-          </p>
+        <details className="group rounded-lg border border-border/70 bg-muted/20 p-4">
+          <summary className="cursor-pointer list-none text-sm font-semibold text-slate-900 marker:hidden">
+            <span className="inline-flex items-center gap-2">
+              <Cpu className="size-4 text-primary" />
+              {zh ? "高级设备选型" : "Advanced equipment"}
+            </span>
+            <span className="mt-1 block text-sm font-normal leading-6 text-muted-foreground">
+              {zh
+                ? "默认不用改。只有客户指定品牌、型号或电池容量时再展开。"
+                : "Leave this unchanged by default. Open only when a customer requires a specific brand or model."}
+            </span>
+          </summary>
 
-          <CatalogSelect value={selectedPanelId} onChange={onPanelChange}>
-            {panelGroups.map(({ mfg, panels }) => (
-              <optgroup key={mfg} label={mfg}>
-                {panels.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.model} ({p.peakPowerW}W) — ฿{formatNumber(p.unitCostTHB!)}
+          <div className="mt-4 grid gap-4">
+            {/* ── Panel selection ──────────────────────────────────────────── */}
+            <div className="rounded-lg border border-border/70 bg-background p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                <SunMedium className="size-4 text-primary" />
+                {zh ? "面板选型" : "Panel Selection"}
+              </div>
+              <p className="mb-3 text-sm text-muted-foreground">
+                {zh
+                  ? "从 iSolarBP 物料库选择组件，报价单价格自动更新。"
+                  : "Pick a module from the iSolarBP catalog. BOM price updates instantly."}
+              </p>
+
+              <CatalogSelect value={selectedPanelId} onChange={onPanelChange}>
+                {panelGroups.map(({ mfg, panels }) => (
+                  <optgroup key={mfg} label={mfg}>
+                    {panels.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.model} ({p.peakPowerW}W) - ฿{formatNumber(p.unitCostTHB!)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </CatalogSelect>
+
+              {activePanel && (
+                <SpecGrid
+                  rows={[
+                    [zh ? "峰值功率" : "Peak Power", `${activePanel.peakPowerW} W`],
+                    [zh ? "类型" : "Type", activePanel.faceType === "bifacial" ? (zh ? "双面" : "Bifacial") : (zh ? "单面" : "Mono-facial")],
+                    [zh ? "单价" : "Unit Price", `${activePanel.unitCostTHB != null ? formatCurrency(activePanel.unitCostTHB) : "-"} / ${zh ? "片" : "pcs"}`],
+                    [zh ? "尺寸" : "Dimensions", `${activePanel.dimLong}x${activePanel.dimShort} mm`],
+                    ["Voc / Isc", `${activePanel.vocV} V / ${activePanel.iscA} A`],
+                    [zh ? "重量" : "Weight", `${activePanel.weightKg} kg`],
+                  ]}
+                />
+              )}
+            </div>
+
+            {/* ── Inverter selection ───────────────────────────────────────── */}
+            <div className="rounded-lg border border-border/70 bg-background p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                <Cpu className="size-4 text-primary" />
+                {zh ? "逆变器选型" : "Inverter Selection"}
+              </div>
+              <p className="mb-3 text-sm text-muted-foreground">
+                {zh
+                  ? "自动会按容量档位匹配，手动选择会覆盖 BOM 默认值。"
+                  : "Auto matches by system tier. Manual selection overrides the BOM default."}
+              </p>
+
+              <CatalogSelect value={selectedInverterId} onChange={onInverterChange}>
+                <option value={AUTO}>{zh ? "自动（按容量档位）" : "Auto (by capacity tier)"}</option>
+                {inverterOptions.map((inv) => (
+                  <option key={inv.id} value={inv.id}>
+                    {inv.model} ({inv.ratedPowerKW} kW) - {inv.unitCostTHB != null ? `฿${formatNumber(inv.unitCostTHB)}` : zh ? "待定" : "TBD"}
                   </option>
                 ))}
-              </optgroup>
-            ))}
-          </CatalogSelect>
+              </CatalogSelect>
 
-          {activePanel && (
-            <SpecGrid
-              rows={[
-                [zh ? "峰值功率" : "Peak Power", `${activePanel.peakPowerW} W`],
-                [zh ? "类型" : "Type", activePanel.faceType === "bifacial" ? (zh ? "双面" : "Bifacial") : (zh ? "单面" : "Mono-facial")],
-                [zh ? "单价" : "Unit Price", `${activePanel.unitCostTHB != null ? formatCurrency(activePanel.unitCostTHB) : "—"} / ${zh ? "片" : "pcs"}`],
-                [zh ? "尺寸" : "Dimensions", `${activePanel.dimLong}×${activePanel.dimShort} mm`],
-                ["Voc / Isc", `${activePanel.vocV} V / ${activePanel.iscA} A`],
-                [zh ? "重量" : "Weight", `${activePanel.weightKg} kg`],
-              ]}
-            />
-          )}
-        </div>
-
-        {/* ── Inverter selection ───────────────────────────────────────── */}
-        <div className="rounded-[1.1rem] border border-border/70 p-4">
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-            <Cpu className="size-4 text-primary" />
-            {zh ? "逆变器选型" : "Inverter Selection"}
-          </div>
-          <p className="mb-3 text-sm text-muted-foreground">
-            {zh
-              ? "手动指定逆变器型号覆盖 BOM 默认值；「自动」由系统容量档位决定。"
-              : "Override the BOM inverter model. \"Auto\" lets the tier determine the inverter."}
-          </p>
-
-          <CatalogSelect value={selectedInverterId} onChange={onInverterChange}>
-            <option value={AUTO}>{zh ? "自动（按容量档位）" : "Auto (by capacity tier)"}</option>
-            {inverterOptions.map((inv) => (
-              <option key={inv.id} value={inv.id}>
-                {inv.model} ({inv.ratedPowerKW} kW) — {inv.unitCostTHB != null ? `฿${formatNumber(inv.unitCostTHB)}` : zh ? "待定" : "TBD"}
-              </option>
-            ))}
-          </CatalogSelect>
-
-          {activeInverter && (
-            <SpecGrid
-              rows={[
-                [zh ? "额定功率" : "Rated Power", `${activeInverter.ratedPowerKW} kW`],
-                [zh ? "相位" : "Phase", activeInverter.phase === "1P" ? (zh ? "单相" : "Single Phase") : (zh ? "三相" : "Three Phase")],
-                [zh ? "模式" : "Mode", activeInverter.mode === "ongrid" ? (zh ? "并网" : "On-Grid") : (zh ? "混合" : "Hybrid")],
-                [zh ? "单价" : "Unit Price", activeInverter.unitCostTHB != null ? formatCurrency(activeInverter.unitCostTHB) : "—"],
-                ["MPPT", `${activeInverter.mpptCount} × (${activeInverter.mpptVoltageMinV}–${activeInverter.mpptVoltageMaxV} V)`],
-                [zh ? "最大输入电压" : "Max Input V", `${activeInverter.maxInputVoltageV} V`],
-                [zh ? "最大串列数" : "Max Strings", `${activeInverter.maxStringCount}`],
-                [zh ? "重量" : "Weight", activeInverter.weightKg != null ? `${activeInverter.weightKg} kg` : "—"],
-              ]}
-            />
-          )}
-        </div>
-
-        {/* ── Battery selection (only when hybrid + battery) ───────────── */}
-        {topology.batteryMode === "with_battery" && (
-          <div className="rounded-[1.1rem] border border-border/70 p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <Zap className="size-4 text-primary" />
-              {zh ? "电池选型" : "Battery Selection"}
+              {activeInverter && (
+                <SpecGrid
+                  rows={[
+                    [zh ? "额定功率" : "Rated Power", `${activeInverter.ratedPowerKW} kW`],
+                    [zh ? "相位" : "Phase", activeInverter.phase === "1P" ? (zh ? "单相" : "Single Phase") : (zh ? "三相" : "Three Phase")],
+                    [zh ? "模式" : "Mode", activeInverter.mode === "ongrid" ? (zh ? "并网" : "On-Grid") : (zh ? "混合" : "Hybrid")],
+                    [zh ? "单价" : "Unit Price", activeInverter.unitCostTHB != null ? formatCurrency(activeInverter.unitCostTHB) : "-"],
+                    ["MPPT", `${activeInverter.mpptCount} x (${activeInverter.mpptVoltageMinV}-${activeInverter.mpptVoltageMaxV} V)`],
+                    [zh ? "最大输入电压" : "Max Input V", `${activeInverter.maxInputVoltageV} V`],
+                    [zh ? "最大串列数" : "Max Strings", `${activeInverter.maxStringCount}`],
+                    [zh ? "重量" : "Weight", activeInverter.weightKg != null ? `${activeInverter.weightKg} kg` : "-"],
+                  ]}
+                />
+              )}
             </div>
-            <p className="mb-3 text-sm text-muted-foreground">
-              {zh
-                ? "选择储能电池型号；「自动」由系统容量档位匹配最合适的容量。"
-                : "Choose a battery model. \"Auto\" matches the best capacity to the system tier."}
-            </p>
 
-            <CatalogSelect value={selectedBatteryId} onChange={onBatteryChange}>
-              <option value={AUTO}>{zh ? "自动（按容量档位）" : "Auto (by capacity tier)"}</option>
-              {BATTERY_CATALOG.map((bat) => (
-                <option key={bat.id} value={bat.id}>
-                  {bat.model} ({bat.capacityKWh} kWh) — ฿{formatNumber(bat.unitCostTHB)}
-                </option>
-              ))}
-            </CatalogSelect>
+            {/* ── Battery selection (only when hybrid + battery) ───────────── */}
+            {topology.batteryMode === "with_battery" && (
+              <div className="rounded-lg border border-border/70 bg-background p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                  <Zap className="size-4 text-primary" />
+                  {zh ? "电池选型" : "Battery Selection"}
+                </div>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  {zh
+                    ? "自动会按容量档位匹配最合适的电池容量。"
+                    : "Auto matches the best battery capacity to the system tier."}
+                </p>
 
-            {activeBattery && (
-              <SpecGrid
-                rows={[
-                  [zh ? "容量" : "Capacity", `${activeBattery.capacityKWh} kWh`],
-                  [zh ? "化学体系" : "Chemistry", activeBattery.chemistry],
-                  [zh ? "循环寿命" : "Cycle Life", `${formatNumber(activeBattery.cycleLife)} ${zh ? "次" : "cycles"}`],
-                  [zh ? "单价" : "Unit Price", formatCurrency(activeBattery.unitCostTHB)],
-                  [zh ? "标称电压" : "Nominal Voltage", activeBattery.nominalVoltageV != null ? `${activeBattery.nominalVoltageV} V` : "—"],
-                  [zh ? "持续电流" : "Continuous Current", activeBattery.continuousCurrentA != null ? `${activeBattery.continuousCurrentA} A` : "—"],
-                  [zh ? "重量" : "Weight", activeBattery.weightKg != null ? `${activeBattery.weightKg} kg` : "—"],
-                ]}
-              />
+                <CatalogSelect value={selectedBatteryId} onChange={onBatteryChange}>
+                  <option value={AUTO}>{zh ? "自动（按容量档位）" : "Auto (by capacity tier)"}</option>
+                  {BATTERY_CATALOG.map((bat) => (
+                    <option key={bat.id} value={bat.id}>
+                      {bat.model} ({bat.capacityKWh} kWh) - ฿{formatNumber(bat.unitCostTHB)}
+                    </option>
+                  ))}
+                </CatalogSelect>
+
+                {activeBattery && (
+                  <SpecGrid
+                    rows={[
+                      [zh ? "容量" : "Capacity", `${activeBattery.capacityKWh} kWh`],
+                      [zh ? "化学体系" : "Chemistry", activeBattery.chemistry],
+                      [zh ? "循环寿命" : "Cycle Life", `${formatNumber(activeBattery.cycleLife)} ${zh ? "次" : "cycles"}`],
+                      [zh ? "单价" : "Unit Price", formatCurrency(activeBattery.unitCostTHB)],
+                      [zh ? "标称电压" : "Nominal Voltage", activeBattery.nominalVoltageV != null ? `${activeBattery.nominalVoltageV} V` : "-"],
+                      [zh ? "持续电流" : "Continuous Current", activeBattery.continuousCurrentA != null ? `${activeBattery.continuousCurrentA} A` : "-"],
+                      [zh ? "重量" : "Weight", activeBattery.weightKg != null ? `${activeBattery.weightKg} kg` : "-"],
+                    ]}
+                  />
+                )}
+              </div>
             )}
           </div>
-        )}
+        </details>
 
       </CardContent>
     </Card>

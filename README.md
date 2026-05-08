@@ -87,6 +87,15 @@ If you do not want to deploy yet, there are two backup options:
 - Calculation steps are meant to stay inspectable and testable.
 - UI components should display logic, not hide it.
 
+## Planning Documents
+
+- [v1.0 test plan](./docs/v1-test-plan.md)
+- [Web/PWA rollout](./docs/pwa-rollout.md)
+- [calculation workflow](./docs/calculation-workflow.md)
+- [Google Solar roadmap](./docs/google-solar-roadmap.md)
+- [production architecture](./docs/production-architecture.md)
+- [AI workflow architecture](./docs/ai-workflow-architecture.md)
+
 ## Validation
 
 Useful commands:

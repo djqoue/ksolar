@@ -15,8 +15,7 @@ export function recommendCapacityTier(
   phase: SystemTopology["phase"],
   supportedPanelCount: number,
 ): TierRecommendation {
-  const allowed = CAPACITY_TIERS.filter((tier) => ALLOWED_TIERS[phase].includes(tier.id));
-  const viable = allowed.filter((tier) => tier.panelCount <= supportedPanelCount);
+  const viable = getViableCapacityTiers(phase, supportedPanelCount);
 
   if (viable.length === 0) {
     return {
@@ -33,3 +32,28 @@ export function recommendCapacityTier(
   };
 }
 
+export function getAllowedCapacityTiers(phase: SystemTopology["phase"]) {
+  return CAPACITY_TIERS.filter((tier) => ALLOWED_TIERS[phase].includes(tier.id));
+}
+
+export function getViableCapacityTiers(
+  phase: SystemTopology["phase"],
+  supportedPanelCount: number,
+) {
+  return getAllowedCapacityTiers(phase).filter((tier) => tier.panelCount <= supportedPanelCount);
+}
+
+export function findSelectableTier(
+  phase: SystemTopology["phase"],
+  supportedPanelCount: number,
+  selectedTierId?: CapacityTier["id"] | null,
+) {
+  if (!selectedTierId) {
+    return null;
+  }
+
+  return (
+    getViableCapacityTiers(phase, supportedPanelCount).find((tier) => tier.id === selectedTierId) ||
+    null
+  );
+}

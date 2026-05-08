@@ -1,6 +1,7 @@
 "use client";
 
 import { fromArrayBuffer } from "geotiff";
+import type { RoofShape } from "@/types/quote";
 import type {
   GoogleSolarDataLayerPaths,
   SolarAnnualFluxOverlay,
@@ -44,6 +45,87 @@ function normalizeShadeValue(value: number, maxValue: number) {
   }
 
   return clamp(value / 255, 0, 1);
+}
+
+function isPointInsidePath(
+  latitude: number,
+  longitude: number,
+  path: Array<{ lat: number; lng: number }>,
+) {
+  if (path.length < 3) {
+    return false;
+  }
+
+  let inside = false;
+
+  for (let i = 0, j = path.length - 1; i < path.length; j = i++) {
+    const xi = path[i].lng;
+    const yi = path[i].lat;
+    const xj = path[j].lng;
+    const yj = path[j].lat;
+
+    const intersects =
+      yi > latitude !== yj > latitude &&
+      longitude <
+        ((xj - xi) * (latitude - yi)) / ((yj - yi) || Number.EPSILON) + xi;
+
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+function buildEffectiveMask(
+  rawMaskBand: NumericRaster,
+  width: number,
+  height: number,
+  bounds: SolarRasterBounds,
+  selectionShapes: RoofShape[],
+) {
+  const effectiveMask = new Uint8Array(rawMaskBand.length);
+  const geospatialShapes = selectionShapes.filter((shape) => shape.path.length > 0);
+  const hasSelection = geospatialShapes.length > 0;
+  const latSpan = bounds.north - bounds.south;
+  const lngSpan = bounds.east - bounds.west;
+
+  for (let row = 0; row < height; row += 1) {
+    for (let column = 0; column < width; column += 1) {
+      const index = row * width + column;
+      const inBuildingMask = Number(rawMaskBand[index]) > 0;
+
+      if (!inBuildingMask) {
+        effectiveMask[index] = 0;
+        continue;
+      }
+
+      if (!hasSelection) {
+        effectiveMask[index] = 1;
+        continue;
+      }
+
+      const latitude = bounds.north - ((row + 0.5) / height) * latSpan;
+      const longitude = bounds.west + ((column + 0.5) / width) * lngSpan;
+      const inSelection = geospatialShapes.some((shape) =>
+        isPointInsidePath(latitude, longitude, shape.path),
+      );
+
+      effectiveMask[index] = inSelection ? 1 : 0;
+    }
+  }
+
+  return effectiveMask;
+}
+
+function maskHasPixels(maskBand: NumericRaster) {
+  for (let index = 0; index < maskBand.length; index += 1) {
+    if (Number(maskBand[index]) > 0) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 async function fetchRasterStack(url: string): Promise<RasterStack> {
@@ -103,6 +185,7 @@ function buildAnnualFluxOverlay(
   annualFluxBand: NumericRaster,
   maskBand: NumericRaster,
   bounds: SolarRasterBounds,
+  maskSource: SolarAnnualFluxOverlay["maskSource"],
 ): SolarAnnualFluxOverlay | null {
   const pixelCount = Math.min(annualFluxBand.length, maskBand.length);
   if (pixelCount === 0) {
@@ -170,6 +253,7 @@ function buildAnnualFluxOverlay(
     maxFlux,
     meanFlux: totalFlux / roofPixelCount,
     roofPixelCount,
+    maskSource,
   };
 }
 
@@ -203,6 +287,7 @@ function computeMaskedBandMeans(
 async function buildMonthlyFluxSummary(
   monthlyFluxPath: string,
   maskPath: string,
+  selectionShapes: RoofShape[],
 ): Promise<SolarMonthlyFluxSummary | null> {
   const [monthlyFlux, mask] = await Promise.all([
     fetchRasterStack(monthlyFluxPath),
@@ -213,10 +298,19 @@ async function buildMonthlyFluxSummary(
     return null;
   }
 
+  const effectiveMask = buildEffectiveMask(
+    mask.bands[0],
+    mask.width,
+    mask.height,
+    mask.bounds,
+    selectionShapes,
+  );
+  const analysisMask = maskHasPixels(effectiveMask) ? effectiveMask : mask.bands[0];
+
   return {
     monthlyFluxMeans: computeMaskedBandMeans(
       monthlyFlux.bands.slice(0, 12),
-      mask.bands[0],
+      analysisMask,
     ),
   };
 }
@@ -224,6 +318,7 @@ async function buildMonthlyFluxSummary(
 async function buildHourlyShadeSummary(
   hourlyShadePaths: string[],
   maskPath: string,
+  selectionShapes: RoofShape[],
 ): Promise<SolarHourlyShadeSummary | null> {
   if (hourlyShadePaths.length === 0) {
     return null;
@@ -234,6 +329,15 @@ async function buildHourlyShadeSummary(
     return null;
   }
 
+  const effectiveMask = buildEffectiveMask(
+    mask.bands[0],
+    mask.width,
+    mask.height,
+    mask.bounds,
+    selectionShapes,
+  );
+  const analysisMask = maskHasPixels(effectiveMask) ? effectiveMask : mask.bands[0];
+
   const monthlySunAccessRatio = await Promise.all(
     hourlyShadePaths.slice(0, 12).map(async (path) => {
       const hourlyShade = await fetchRasterStack(path);
@@ -241,7 +345,7 @@ async function buildHourlyShadeSummary(
         return 0;
       }
 
-      const bandMeans = computeMaskedBandMeans(hourlyShade.bands, mask.bands[0]);
+      const bandMeans = computeMaskedBandMeans(hourlyShade.bands, analysisMask);
       const maxValue = Math.max(...bandMeans, 1);
       const normalized = bandMeans.map((value) => normalizeShadeValue(value, maxValue));
       const daylightBandMeans = normalized.filter((value) => value > 0);
@@ -265,6 +369,7 @@ async function buildHourlyShadeSummary(
 
 export async function buildSolarDataLayerAnalysis(
   dataLayers: GoogleSolarDataLayerPaths,
+  selectionShapes: RoofShape[],
 ): Promise<SolarDataLayerAnalysis> {
   if (!dataLayers.annualFluxPath || !dataLayers.maskPath) {
     return {
@@ -278,22 +383,48 @@ export async function buildSolarDataLayerAnalysis(
     fetchRasterStack(dataLayers.annualFluxPath),
     fetchRasterStack(dataLayers.maskPath),
     dataLayers.monthlyFluxPath
-      ? buildMonthlyFluxSummary(dataLayers.monthlyFluxPath, dataLayers.maskPath)
+      ? buildMonthlyFluxSummary(
+          dataLayers.monthlyFluxPath,
+          dataLayers.maskPath,
+          selectionShapes,
+        )
       : Promise.resolve(null),
     dataLayers.hourlyShadePaths.length > 0
-      ? buildHourlyShadeSummary(dataLayers.hourlyShadePaths, dataLayers.maskPath)
+      ? buildHourlyShadeSummary(
+          dataLayers.hourlyShadePaths,
+          dataLayers.maskPath,
+          selectionShapes,
+        )
       : Promise.resolve(null),
   ]);
 
+  const effectiveMask =
+    mask.bands[0]
+      ? buildEffectiveMask(
+          mask.bands[0],
+          mask.width,
+          mask.height,
+          mask.bounds,
+          selectionShapes,
+        )
+      : null;
+  const overlayMask =
+    effectiveMask && maskHasPixels(effectiveMask)
+      ? { band: effectiveMask, source: "selected-roof" as const }
+      : mask.bands[0]
+        ? { band: mask.bands[0], source: "google-building" as const }
+        : null;
+
   return {
     annualFluxOverlay:
-      annualFlux.bands[0] && mask.bands[0]
+      annualFlux.bands[0] && overlayMask
         ? buildAnnualFluxOverlay(
             annualFlux.width,
             annualFlux.height,
             annualFlux.bands[0],
-            mask.bands[0],
+            overlayMask.band,
             annualFlux.bounds,
+            overlayMask.source,
           )
         : null,
     monthlyFlux,
