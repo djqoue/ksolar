@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { startTransition, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, MapPinned, type LucideIcon, Settings2, Sparkles } from "lucide-react";
 import { LocaleProvider, useAppCopy, useLocaleContext } from "@/components/locale-provider";
@@ -362,7 +363,7 @@ function DashboardShellContent() {
   return (
     <div className="ksolar-shell pb-24">
       <header className="ksolar-topbar">
-        <div className="mx-auto flex max-w-[1180px] items-center justify-between gap-3 px-4 py-3 lg:px-6">
+        <div className="mx-auto flex max-w-[1180px] items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <BrandMark />
             <div className="min-w-0">
@@ -374,10 +375,10 @@ function DashboardShellContent() {
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             {crmEnabled ? (
-              <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
-                <a href="/crm">CRM</a>
+              <Button asChild variant="outline" size="sm" className="px-2.5 sm:px-3.5">
+                <Link href="/crm">CRM</Link>
               </Button>
             ) : null}
             {LANGUAGE_OPTIONS.map((option) => (
@@ -385,6 +386,7 @@ function DashboardShellContent() {
                 key={option.value}
                 variant={locale === option.value ? "default" : "outline"}
                 size="sm"
+                className="px-2.5 sm:px-3.5"
                 onClick={() => {
                   startTransition(() => {
                     setLocale(option.value);
