@@ -1,8 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Mail, Phone } from "lucide-react";
-import { sendPhoneOtp, signInWithEmailPassword, signUpWithEmailPassword } from "@/app/(auth)/login/actions";
+import { Mail } from "lucide-react";
+import { signInWithEmailPassword, signUpWithEmailPassword } from "@/app/(auth)/login/actions";
 import { AuthSubmitButton } from "@/components/auth-submit-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,9 +19,7 @@ interface LoginFormsProps {
 export function LoginForms({ configured, defaultDialCode }: LoginFormsProps) {
   const [signInState, signInAction] = useActionState(signInWithEmailPassword, initialAuthActionState);
   const [signUpState, signUpAction] = useActionState(signUpWithEmailPassword, initialAuthActionState);
-  const [otpState, otpAction] = useActionState(sendPhoneOtp, initialAuthActionState);
   const [signUpDialCode, setSignUpDialCode] = useState(defaultDialCode);
-  const [otpDialCode, setOtpDialCode] = useState(defaultDialCode);
 
   return (
     <section className="grid gap-4">
@@ -60,7 +58,7 @@ export function LoginForms({ configured, defaultDialCode }: LoginFormsProps) {
       <Card className="border-white/75 bg-white/90">
         <CardHeader>
           <CardTitle>注册销售账号</CardTitle>
-          <CardDescription>注册前会检查邮箱/手机号是否重复。注册后如需邮箱确认，请先完成邮件确认再登录。</CardDescription>
+          <CardDescription>测试阶段已关闭邮箱和短信验证。注册前只检查邮箱/手机号是否重复。</CardDescription>
         </CardHeader>
         <CardContent>
           <form action={signUpAction} className="grid gap-4" noValidate>
@@ -121,29 +119,9 @@ export function LoginForms({ configured, defaultDialCode }: LoginFormsProps) {
         </CardContent>
       </Card>
 
-      <Card className="border-white/75 bg-white/90">
-        <CardHeader>
-          <CardTitle>手机号 OTP</CardTitle>
-          <CardDescription>代码已预留。正式启用前需要在 Supabase 配置 SMS provider，例如 Twilio。</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form action={otpAction} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" noValidate>
-            <div className="grid gap-3">
-              <ActionBanner state={otpState} />
-              <PhoneField
-                id="otp-phone"
-                label="手机号"
-                dialCode={otpDialCode}
-                onDialCodeChange={setOtpDialCode}
-                required
-                helper="会按所选国家区号自动转成国际格式。"
-              />
-            </div>
-            <AuthSubmitButton pendingLabel="发送中..." variant="secondary" disabled={!configured}>
-              <Phone className="size-4" />
-              发送 OTP
-            </AuthSubmitButton>
-          </form>
+      <Card className="border-emerald-200 bg-emerald-50/80">
+        <CardContent className="p-5 text-sm leading-6 text-emerald-950">
+          当前测试阶段使用邮箱 + 密码登录，不启用邮箱确认或手机 OTP。正式给销售团队开放前，再决定是否打开短信验证或企业邮箱邀请。
         </CardContent>
       </Card>
     </section>

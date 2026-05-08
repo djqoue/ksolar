@@ -14,6 +14,10 @@ describe("auth validation", () => {
     expect(composeInternationalPhone("+66", "+66812345678")).toBe("+66812345678");
   });
 
+  it("removes the Thai trunk zero when users paste +66 0 style numbers", () => {
+    expect(composeInternationalPhone("+66", "+660610208968")).toBe("+66610208968");
+  });
+
   it("rejects incomplete phone numbers before any auth request is sent", () => {
     expect(validatePhone(composeInternationalPhone("+66", "123")).valid).toBe(false);
   });

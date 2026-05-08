@@ -31,11 +31,11 @@ function mapAuthErrorMessage(message: string) {
   const normalizedMessage = message.toLowerCase();
 
   if (normalizedMessage.includes("invalid login credentials")) {
-    return "邮箱或密码不正确。如果刚注册，请先确认邮箱后再登录。";
+    return "邮箱或密码不正确。测试阶段已关闭邮箱/短信验证，请确认账号和密码是否正确。";
   }
 
   if (normalizedMessage.includes("email not confirmed")) {
-    return "账号已创建，但邮箱还没有确认。请先打开 Supabase 发送的确认邮件。";
+    return "后台仍要求邮箱确认。测试阶段应关闭邮箱验证，请联系管理员检查 Supabase Auth 设置。";
   }
 
   if (normalizedMessage.includes("already registered") || normalizedMessage.includes("user already exists")) {
@@ -160,7 +160,7 @@ export async function signUpWithEmailPassword(_prevState: AuthActionState, formD
   revalidatePath("/", "layout");
 
   if (!data.session) {
-    return succeed("账号已创建。请先确认邮箱，然后再用邮箱和密码登录。");
+    return succeed("账号已创建。测试阶段已关闭邮箱/短信验证；如果没有自动进入系统，请直接用邮箱和密码登录。");
   }
 
   redirect("/");

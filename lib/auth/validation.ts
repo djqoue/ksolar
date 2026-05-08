@@ -32,7 +32,13 @@ export function composeInternationalPhone(countryCode: string, localNumber: stri
   }
 
   if (normalizedLocalNumber.startsWith("+")) {
-    return normalizedLocalNumber;
+    const internationalDigits = normalizedLocalNumber.replace(/\D/g, "");
+    const withoutTrunkZero =
+      countryDigits && internationalDigits.startsWith(`${countryDigits}0`)
+        ? `${countryDigits}${internationalDigits.slice(countryDigits.length + 1)}`
+        : internationalDigits;
+
+    return `+${withoutTrunkZero}`;
   }
 
   const localDigits = normalizedLocalNumber.replace(/\D/g, "");
