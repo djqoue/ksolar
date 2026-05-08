@@ -1,10 +1,12 @@
 import { Mail, Phone, ShieldCheck } from "lucide-react";
+import { redirect } from "next/navigation";
 import { signInWithEmailPassword, signUpWithEmailPassword, sendPhoneOtp } from "@/app/(auth)/login/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isSupabaseConfigured, SUPABASE_ENV_KEYS } from "@/lib/auth/supabase-config";
+import { getCurrentSupabaseUser } from "@/lib/supabase/server";
 
 interface LoginPageProps {
   searchParams?: Promise<{
@@ -16,6 +18,11 @@ interface LoginPageProps {
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const configured = isSupabaseConfigured();
+  const user = configured ? await getCurrentSupabaseUser() : null;
+
+  if (user) {
+    redirect("/");
+  }
 
   return (
     <main className="ksolar-shell min-h-screen px-4 py-8">

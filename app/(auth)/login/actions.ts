@@ -35,7 +35,7 @@ export async function signInWithEmailPassword(formData: FormData) {
   }
 
   revalidatePath("/", "layout");
-  redirect("/crm");
+  redirect("/");
 }
 
 export async function signUpWithEmailPassword(formData: FormData) {
@@ -54,7 +54,7 @@ export async function signUpWithEmailPassword(formData: FormData) {
     redirectWithLoginError("Email and password are required.");
   }
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -70,7 +70,13 @@ export async function signUpWithEmailPassword(formData: FormData) {
   }
 
   revalidatePath("/", "layout");
-  redirect("/crm");
+
+  if (!data.session) {
+    const params = new URLSearchParams({ notice: "Account created. Please confirm your email, then sign in." });
+    redirect(`/login?${params.toString()}`);
+  }
+
+  redirect("/");
 }
 
 export async function sendPhoneOtp(formData: FormData) {
