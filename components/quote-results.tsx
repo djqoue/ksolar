@@ -21,9 +21,6 @@ import { RoiSummary } from "@/components/roi-summary";
 interface QuoteResultsProps {
   result: QuoteScenarioResult;
   solarInsights?: GoogleSolarSummary | null;
-  topologySummary: string;
-  pricingPresetLabel: string;
-  financeSelectionCount: number;
   sellablePanelProfile: SellablePanelProfile;
   solarSelectionMatch?: SolarSelectionMatchSummary | null;
   availableQuoteTiers: CapacityTier[];
@@ -34,9 +31,6 @@ interface QuoteResultsProps {
 export function QuoteResults({
   result,
   solarInsights,
-  topologySummary,
-  pricingPresetLabel,
-  financeSelectionCount,
   sellablePanelProfile,
   solarSelectionMatch,
   availableQuoteTiers,
@@ -68,18 +62,18 @@ export function QuoteResults({
       <RoiSummary result={result} />
 
       <Card className="border-white/75 bg-white/90">
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle>
-            {locale === "zh" ? "调整客户方案" : locale === "th" ? "ปรับขนาดแพ็กเกจ" : "Adjust Customer Package"}
+            {locale === "zh" ? "客户容量" : locale === "th" ? "ขนาดแพ็กเกจ" : "Customer Package"}
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4">
-          <div className="rounded-[1.25rem] border border-border/70 bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
+        <CardContent className="grid gap-3">
+          <div className="text-sm leading-6 text-muted-foreground">
             {locale === "zh"
-              ? `当前屋顶最大可支持约 ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp。销售可以按客户预算选择更小档位，价格、月供和回本会立即联动。`
+              ? `屋顶上限约 ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp。按客户预算选标准档位，价格和回本会即时更新。`
               : locale === "th"
-                ? `หลังคานี้รองรับได้ประมาณ ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp สามารถเลือกแพ็กเกจเล็กลงตามงบลูกค้า แล้วราคา ค่างวด และคืนทุนจะปรับทันที`
-                : `This roof supports about ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp. Pick a smaller package if the customer wants lower capex; price, payment, and payback update instantly.`}
+                ? `หลังคารองรับได้ประมาณ ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp เลือกแพ็กเกจตามงบลูกค้า ราคาและคืนทุนจะปรับทันที`
+                : `Roof limit is about ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp. Pick a standard package and price/payback update instantly.`}
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
             {availableQuoteTiers.map((tier) => {
@@ -119,84 +113,6 @@ export function QuoteResults({
               {locale === "zh" ? "恢复系统推荐" : locale === "th" ? "กลับไปใช้คำแนะนำระบบ" : "Restore system recommendation"}
             </button>
           ) : null}
-        </CardContent>
-      </Card>
-
-      <Card className="relative overflow-hidden border-white/75 bg-[radial-gradient(circle_at_8%_0%,rgba(20,184,166,0.13),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(247,249,248,0.94))]">
-        <div className="energy-line" />
-        <CardHeader className="border-b border-border/50">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <CardTitle>{copy.workflow.proposalTitle}</CardTitle>
-            </div>
-            {result.recommendedTier ? <Badge>{result.recommendedTier.id}</Badge> : null}
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-          <div className="grid gap-4">
-            <div className="rounded-[1.4rem] border border-white/80 bg-white/90 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.06)] backdrop-blur">
-              <div className="metric-label">{copy.quote.quotedPackageSize}</div>
-              <div className="mt-2 text-[2.45rem] font-semibold tracking-[-0.055em] text-slate-950 md:text-[3.2rem]">
-                {result.quotedSystemSizeWp > 0 ? `${formatNumber(result.quotedSystemSizeWp / 1000, 2)} kWp` : "N/A"}
-              </div>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">{topologySummary}</p>
-              {result.roofFitSystemWp > 0 ? (
-                <p className="mt-2 text-sm leading-6 text-slate-700">
-                  {copy.quote.roofFitSize}: <span className="font-semibold">{formatNumber(result.roofFitSystemWp / 1000, 2)} kWp</span>
-                  <span className="text-muted-foreground">
-                    {" · "}
-                    {copy.quote.roofPotentialGeneration}: {formatNumber(result.roofPotentialAnnualGenerationKWh)} kWh
-                  </span>
-                </p>
-              ) : null}
-              {result.recommendedTier ? <p className="mt-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">{result.recommendedTier.id}</p> : null}
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[1.2rem] border border-white/80 bg-white/90 p-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)]">
-                <div className="metric-label">{copy.workflow.sellPrice}</div>
-                <div className="mt-2 text-xl font-semibold">{formatCurrency(result.suggestedSellPriceTHB)}</div>
-              </div>
-              <div className="rounded-[1.2rem] border border-slate-950 bg-slate-950 p-4 text-white shadow-[0_18px_40px_rgba(15,23,42,0.16)]">
-                <div className="metric-label">{copy.workflow.netPrice}</div>
-                <div className="mt-2 text-xl font-semibold">{formatCurrency(result.finance.financeAdjustedPriceTHB)}</div>
-              </div>
-              <div className="rounded-[1.2rem] border border-white/80 bg-white/90 p-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)]">
-                <div className="metric-label">{copy.roi.annualSavings}</div>
-                <div className="mt-2 text-xl font-semibold">{formatCurrency(result.annualSavingsTHB)}</div>
-              </div>
-            </div>
-          </div>
-          <div className="grid gap-4">
-            <div className="rounded-[1.4rem] border border-white/80 bg-white/80 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.055)] backdrop-blur">
-              <div className="metric-label">{copy.system.pricingPreset}</div>
-              <div className="mt-2 text-xl font-semibold">{pricingPresetLabel}</div>
-              <div className="mt-4 grid gap-3 text-sm text-slate-700">
-                <div className="flex items-start justify-between gap-4">
-                  <span className="text-muted-foreground">{copy.finance.title}</span>
-                  <span className="font-semibold">{financeSelectionCount}</span>
-                </div>
-                <div className="flex items-start justify-between gap-4">
-                  <span className="text-muted-foreground">{copy.solar.title}</span>
-                  <span className="font-semibold">
-                    {solarInsights && !isSolarConfirmed
-                      ? copy.solar.reviewRoofBoundary
-                      : solarCrossCheck
-                        ? getLocalizedSolarActionSummary(locale, solarCrossCheck)
-                        : copy.workflow.reviewNeeded}
-                  </span>
-                </div>
-                <div className="flex items-start justify-between gap-4">
-                  <span className="text-muted-foreground">{copy.workflow.currentFocus}</span>
-                  <span className="font-semibold">{result.isViable ? copy.workflow.viable : copy.workflow.reviewNeeded}</span>
-                </div>
-              </div>
-            </div>
-            <div className="rounded-[1.4rem] border border-white/80 bg-muted/20 p-5 text-sm leading-6 text-slate-700">
-              {result.recommendedTier
-                ? `${copy.quote.quotedPackageSize}: ${result.recommendedTier.id} ${topologySummary}. ${copy.quote.roofFitSize}: ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp.`
-                : copy.workflow.noProposal}
-            </div>
-          </div>
         </CardContent>
       </Card>
 

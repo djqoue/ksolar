@@ -1,7 +1,7 @@
 "use client";
 
 import { startTransition, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, MapPinned, type LucideIcon, Settings2, Sparkles, WalletCards } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPinned, type LucideIcon, Settings2, Sparkles } from "lucide-react";
 import { LocaleProvider, useAppCopy, useLocaleContext } from "@/components/locale-provider";
 import { Map } from "@/components/Map";
 import { FinanceSelector } from "@/components/finance-selector";
@@ -31,7 +31,7 @@ import type { MapSelectionSummary, PricingPreset } from "@/types/quote";
 import type { CapacityTierId, SystemTopology } from "@/types/bom";
 import type { GoogleSolarDataLayerPaths, GoogleSolarSummary, SolarLatLng } from "@/types/solar";
 
-type StepNumber = 1 | 2 | 3 | 4;
+type StepNumber = 1 | 2 | 3;
 
 interface WorkflowStepState {
   number: StepNumber;
@@ -76,8 +76,6 @@ function DashboardShellContent() {
   const [selectedFinanceIds, setSelectedFinanceIds] = useState(
     FINANCE_PRODUCTS.filter((product) => product.enabledByDefault).map((product) => product.id),
   );
-  const [systemReviewed, setSystemReviewed] = useState(false);
-  const [validationReviewed, setValidationReviewed] = useState(false);
   const [activeStep, setActiveStep] = useState<StepNumber>(1);
   const [ftRateTHBPerKWh, setFtRateTHBPerKWh] = useState<number>(SOLAR_DEFAULTS.defaultFtRateTHBPerKWh);
   const [selfConsumptionRatio, setSelfConsumptionRatio] = useState<number>(SOLAR_DEFAULTS.defaultSelfConsumptionRatio);
@@ -91,9 +89,9 @@ function DashboardShellContent() {
   const [solarErrorMessage, setSolarErrorMessage] = useState<string | null>(null);
 
   const step1Done = mapSelection.grossAreaM2 > 0;
-  const step2Done = step1Done && systemReviewed;
-  const step3Done = step2Done && validationReviewed;
-  const maxUnlockedStep: StepNumber = step3Done ? 4 : step2Done ? 3 : step1Done ? 2 : 1;
+  const step2Done = step1Done;
+  const step3Done = step1Done;
+  const maxUnlockedStep: StepNumber = step1Done ? 3 : 1;
 
   useEffect(() => {
     if (activeStep > maxUnlockedStep) {
@@ -214,19 +212,10 @@ function DashboardShellContent() {
       },
       {
         number: 3,
-        title: copy.workflow.step3Title,
-        description: copy.workflow.step3Description,
-        done: step3Done,
-        unlocked: step2Done,
-        icon: WalletCards,
-        tone: "bg-accent text-accent-foreground",
-      },
-      {
-        number: 4,
         title: copy.workflow.step4Title,
         description: copy.workflow.step4Description,
         done: step3Done && (result.isViable || result.warnings.length > 0),
-        unlocked: step3Done,
+        unlocked: step1Done,
         icon: Sparkles,
         tone: "bg-slate-900 text-white",
       },
@@ -236,8 +225,6 @@ function DashboardShellContent() {
       copy.workflow.step1Title,
       copy.workflow.step2Description,
       copy.workflow.step2Title,
-      copy.workflow.step3Description,
-      copy.workflow.step3Title,
       copy.workflow.step4Description,
       copy.workflow.step4Title,
       result.isViable,
@@ -253,25 +240,21 @@ function DashboardShellContent() {
       return 100;
     }
 
-    if (step2Done) {
-      return 75;
-    }
-
     if (step1Done) {
-      return 50;
+      return 66;
     }
 
-    return 25;
-  }, [step1Done, step2Done, step3Done]);
+    return 33;
+  }, [step1Done, step3Done]);
 
   const activeStepState = steps.find((step) => step.number === activeStep) ?? steps[0];
   const pricingMeta = getLocalizedPresetMeta(locale, pricingPresetId);
   const stepShortLabels =
     locale === "zh"
-      ? ["屋顶", "方案", "校验", "报价"]
+      ? ["屋顶", "方案", "报价"]
       : locale === "th"
-        ? ["หลังคา", "ระบบ", "ตรวจสอบ", "ราคา"]
-        : ["Roof", "System", "Check", "Quote"];
+        ? ["หลังคา", "ระบบ", "ราคา"]
+        : ["Roof", "System", "Quote"];
 
   const topologySummary = [
     topology.phase === "1P" ? copy.system.singlePhase : copy.system.threePhase,
@@ -327,7 +310,6 @@ function DashboardShellContent() {
         );
       }
       setSolarStatus("success");
-      setValidationReviewed(true);
     } catch (error) {
       setSolarInsights(null);
       setSolarInsightsKey(null);
@@ -361,23 +343,17 @@ function DashboardShellContent() {
 
   const handleMapSelectionChange = (value: MapSelectionSummary) => {
     setMapSelection(value);
-    setValidationReviewed(false);
   };
 
   const handleTopologyChange = (value: SystemTopology) => {
-    setSystemReviewed(true);
-    setValidationReviewed(false);
     setTopology(value);
   };
 
   const handlePricingPresetChange = (value: PricingPreset["id"]) => {
-    setSystemReviewed(true);
-    setValidationReviewed(false);
     setPricingPresetId(value);
   };
 
   const handleFinanceChange = (ids: string[]) => {
-    setValidationReviewed(true);
     setSelectedFinanceIds(ids);
   };
 
@@ -392,7 +368,7 @@ function DashboardShellContent() {
                 KSolar
               </div>
               <div className="mt-0.5 truncate text-xs font-medium text-muted-foreground">
-                {copy.workflow.stepLabel} {activeStep}/4 · {activeStepState.title}
+                {copy.workflow.stepLabel} {activeStep}/3 · {activeStepState.title}
               </div>
             </div>
           </div>
@@ -423,7 +399,7 @@ function DashboardShellContent() {
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
             {steps.map((step, index) => {
               const isActive = activeStep === step.number;
               return (
@@ -505,53 +481,7 @@ function DashboardShellContent() {
                   <Button
                     size="lg"
                     className="min-w-[180px]"
-                    onClick={() => {
-                      setSystemReviewed(true);
-                      setActiveStep(3);
-                    }}
-                  >
-                    {copy.workflow.continueWithCurrent}
-                    <ChevronRight className="size-4" />
-                  </Button>
-                </div>
-              }
-            >
-              <SystemSelector
-                topology={topology}
-                pricingPresetId={pricingPresetId}
-                selectedPanelId={selectedPanelId}
-                selectedInverterId={selectedInverterId}
-                selectedBatteryId={selectedBatteryId}
-                onTopologyChange={handleTopologyChange}
-                onPricingPresetChange={handlePricingPresetChange}
-                onPanelChange={setSelectedPanelId}
-                onInverterChange={setSelectedInverterId}
-                onBatteryChange={setSelectedBatteryId}
-              />
-            </StageFrame>
-          ) : null}
-
-          {activeStep === 3 ? (
-            <StageFrame
-              icon={WalletCards}
-              stepNumber={3}
-              tone={steps[2].tone}
-              title={copy.workflow.step3Title}
-              description={copy.workflow.step3Description}
-              signal={activeSolarInsights ? "SOLAR READY" : "VERIFY"}
-              footer={
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <Button variant="outline" size="lg" onClick={() => setActiveStep(2)}>
-                    <ChevronLeft className="size-4" />
-                    {copy.workflow.back}
-                  </Button>
-                  <Button
-                    size="lg"
-                    className="min-w-[180px]"
-                    onClick={() => {
-                      setValidationReviewed(true);
-                      setActiveStep(4);
-                    }}
+                    onClick={() => setActiveStep(3)}
                   >
                     {copy.workflow.openProposal}
                     <ChevronRight className="size-4" />
@@ -559,7 +489,7 @@ function DashboardShellContent() {
                 </div>
               }
             >
-              <div className="grid gap-4">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
                 <SolarInsightsCard
                   insights={activeSolarInsights}
                   status={solarStatus}
@@ -587,68 +517,140 @@ function DashboardShellContent() {
                   dataLayers={activeSolarDataLayers}
                   sellablePanelProfile={selectedPanelProfile}
                 />
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{copy.tariff.title}</CardTitle>
-                    <CardDescription>{copy.tariff.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 sm:grid-cols-3">
-                    <div className="grid gap-2">
-                      <label className="text-sm font-medium">{copy.tariff.ftRate}</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={ftRateTHBPerKWh}
-                        onChange={(event) => {
-                          setValidationReviewed(true);
-                          setFtRateTHBPerKWh(Number(event.target.value));
-                        }}
+                <div className="grid gap-4">
+                  <Card className="border-white/75 bg-white/90">
+                    <CardHeader className="pb-3">
+                      <CardTitle>{locale === "zh" ? "推荐方案" : locale === "th" ? "แพ็กเกจแนะนำ" : "Recommended Setup"}</CardTitle>
+                      <CardDescription>
+                        {locale === "zh"
+                          ? "默认值可直接报价，只在客户明确要求时调整。"
+                          : locale === "th"
+                            ? "ค่าเริ่มต้นพร้อมเสนอราคา ปรับเมื่อจำเป็นเท่านั้น"
+                            : "Defaults are quote-ready. Adjust only when the customer asks."}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant={topology.phase === "1P" ? "default" : "outline"}
+                          onClick={() => handleTopologyChange({ ...topology, phase: "1P" })}
+                        >
+                          {copy.system.singlePhase}
+                        </Button>
+                        <Button
+                          variant={topology.phase === "3P" ? "default" : "outline"}
+                          onClick={() => handleTopologyChange({ ...topology, phase: "3P" })}
+                        >
+                          {copy.system.threePhase}
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant={topology.mode === "ongrid" ? "default" : "outline"}
+                          onClick={() => handleTopologyChange({ ...topology, mode: "ongrid", batteryMode: "none" })}
+                        >
+                          {copy.system.ongrid}
+                        </Button>
+                        <Button
+                          variant={topology.mode === "hybrid" ? "default" : "outline"}
+                          onClick={() => handleTopologyChange({ ...topology, mode: "hybrid" })}
+                        >
+                          {copy.system.hybrid}
+                        </Button>
+                      </div>
+                      <div className="grid gap-2 rounded-2xl border border-border/70 bg-muted/25 p-4 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">{copy.quote.quotedPackageSize}</span>
+                          <span className="font-semibold">{result.quotedSystemSizeWp > 0 ? `${formatNumber(result.quotedSystemSizeWp / 1000, 1)} kWp` : "N/A"}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">{copy.solar.googlePanelWattage}</span>
+                          <span className="font-semibold">{formatNumber(selectedPanelProfile.powerWp)} W KSolar</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">{copy.system.pricingPreset}</span>
+                          <span className="font-semibold">{pricingMeta.label}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <details className="rounded-[1.4rem] border border-border/70 bg-white/90 p-4 shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
+                    <summary className="cursor-pointer list-none text-sm font-semibold text-slate-950 marker:hidden">
+                      {locale === "zh" ? "高级系统和设备设置" : locale === "th" ? "ตั้งค่าระบบและอุปกรณ์ขั้นสูง" : "Advanced system and equipment"}
+                      <span className="mt-1 block text-sm font-normal text-muted-foreground">
+                        {locale === "zh"
+                          ? "销售现场通常不用展开。需要换品牌、价格档或电池时再打开。"
+                          : locale === "th"
+                            ? "ปกติไม่ต้องเปิด ใช้เมื่อเปลี่ยนแบรนด์ ราคา หรือแบตเตอรี่"
+                            : "Usually keep closed in the field. Open for brand, price tier, or battery changes."}
+                      </span>
+                    </summary>
+                    <div className="mt-4">
+                      <SystemSelector
+                        topology={topology}
+                        pricingPresetId={pricingPresetId}
+                        selectedPanelId={selectedPanelId}
+                        selectedInverterId={selectedInverterId}
+                        selectedBatteryId={selectedBatteryId}
+                        onTopologyChange={handleTopologyChange}
+                        onPricingPresetChange={handlePricingPresetChange}
+                        onPanelChange={setSelectedPanelId}
+                        onInverterChange={setSelectedInverterId}
+                        onBatteryChange={setSelectedBatteryId}
                       />
                     </div>
-                    <div className="grid gap-2">
-                      <label className="text-sm font-medium">{copy.tariff.selfUseRatio}</label>
-                      <Input
-                        type="number"
-                        step="0.05"
-                        min="0"
-                        max="1"
-                        value={selfConsumptionRatio}
-                        onChange={(event) => {
-                          setValidationReviewed(true);
-                          setSelfConsumptionRatio(Number(event.target.value));
-                        }}
-                      />
+                  </details>
+                  <details className="rounded-[1.4rem] border border-border/70 bg-white/90 p-4 shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
+                    <summary className="cursor-pointer list-none text-sm font-semibold text-slate-950 marker:hidden">
+                      {locale === "zh" ? "金融和电价假设" : locale === "th" ? "สมมติฐานการเงินและค่าไฟ" : "Finance and tariff assumptions"}
+                      <span className="mt-1 block text-sm font-normal text-muted-foreground">
+                        {locale === "zh"
+                          ? "默认值可直接出报价，需要时再展开调整。"
+                          : locale === "th"
+                            ? "ใช้ค่าเริ่มต้นเพื่อออกใบเสนอราคาได้ทันที เปิดเมื่อจำเป็นต้องปรับ"
+                            : "Defaults are ready for a quote. Open only when you need to adjust."}
+                      </span>
+                    </summary>
+                    <div className="mt-4 grid gap-4">
+                      <Card className="border-border/70 shadow-none">
+                        <CardHeader>
+                          <CardTitle>{copy.tariff.title}</CardTitle>
+                          <CardDescription>{copy.tariff.description}</CardDescription>
+                        </CardHeader>
+                        <CardContent className="grid gap-4">
+                          <div className="grid gap-2">
+                            <label className="text-sm font-medium">{copy.tariff.ftRate}</label>
+                            <Input type="number" step="0.01" value={ftRateTHBPerKWh} onChange={(event) => setFtRateTHBPerKWh(Number(event.target.value))} />
+                          </div>
+                          <div className="grid gap-2">
+                            <label className="text-sm font-medium">{copy.tariff.selfUseRatio}</label>
+                            <Input type="number" step="0.05" min="0" max="1" value={selfConsumptionRatio} onChange={(event) => setSelfConsumptionRatio(Number(event.target.value))} />
+                          </div>
+                          <div className="grid gap-2">
+                            <label className="text-sm font-medium">{copy.tariff.exportRate}</label>
+                            <Input type="number" step="0.1" value={exportRateTHBPerKWh} onChange={(event) => setExportRateTHBPerKWh(Number(event.target.value))} />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <FinanceSelector selectedFinanceIds={selectedFinanceIds} onChange={handleFinanceChange} />
                     </div>
-                    <div className="grid gap-2">
-                      <label className="text-sm font-medium">{copy.tariff.exportRate}</label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        value={exportRateTHBPerKWh}
-                        onChange={(event) => {
-                          setValidationReviewed(true);
-                          setExportRateTHBPerKWh(Number(event.target.value));
-                        }}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-                <FinanceSelector selectedFinanceIds={selectedFinanceIds} onChange={handleFinanceChange} />
+                  </details>
+                </div>
               </div>
             </StageFrame>
           ) : null}
 
-          {activeStep === 4 ? (
+          {activeStep === 3 ? (
             <StageFrame
               icon={Sparkles}
-              stepNumber={4}
-              tone={steps[3].tone}
+              stepNumber={3}
+              tone={steps[2].tone}
               title={copy.workflow.step4Title}
               description={copy.workflow.step4Description}
               signal={result.quotedSystemSizeWp > 0 ? `${formatNumber(result.quotedSystemSizeWp / 1000, 1)} kWp` : "QUOTE"}
               footer={
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <Button variant="outline" size="lg" onClick={() => setActiveStep(3)}>
+                  <Button variant="outline" size="lg" onClick={() => setActiveStep(2)}>
                     <ChevronLeft className="size-4" />
                     {copy.workflow.back}
                   </Button>
@@ -659,9 +661,6 @@ function DashboardShellContent() {
               <QuoteResults
                 result={result}
                 solarInsights={activeSolarInsights}
-                topologySummary={topologySummary}
-                pricingPresetLabel={pricingMeta.label}
-                financeSelectionCount={selectedFinanceIds.length}
                 sellablePanelProfile={selectedPanelProfile}
                 solarSelectionMatch={solarSelectionMatch}
                 availableQuoteTiers={availableQuoteTiers}
