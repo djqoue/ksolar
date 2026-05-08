@@ -22,6 +22,27 @@ export function normalizePhone(value: string) {
   return value.replace(/[\s()-]/g, "").trim();
 }
 
+export function composeInternationalPhone(countryCode: string, localNumber: string) {
+  const countryDigits = countryCode.replace(/\D/g, "");
+  const normalizedCountryCode = `+${countryDigits || "66"}`;
+  const normalizedLocalNumber = normalizePhone(localNumber);
+
+  if (!normalizedLocalNumber) {
+    return "";
+  }
+
+  if (normalizedLocalNumber.startsWith("+")) {
+    return normalizedLocalNumber;
+  }
+
+  const localDigits = normalizedLocalNumber.replace(/\D/g, "");
+  const withoutCountryPrefix = localDigits.startsWith(countryDigits)
+    ? localDigits.slice(countryDigits.length)
+    : localDigits;
+
+  return `${normalizedCountryCode}${withoutCountryPrefix.replace(/^0+/, "")}`;
+}
+
 export function validateEmail(value: string): ValidationResult {
   const email = normalizeEmail(value);
 
@@ -44,7 +65,7 @@ export function validatePhone(value: string): ValidationResult {
   }
 
   if (!PHONE_PATTERN.test(phone)) {
-    return { valid: false, message: "手机号请使用国际格式，例如 +66812345678。" };
+    return { valid: false, message: "手机号格式不正确。请选择国家区号，并输入本地手机号，例如泰国 0812345678 会自动转成 +66812345678。" };
   }
 
   return { valid: true };
