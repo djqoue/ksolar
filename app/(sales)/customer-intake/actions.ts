@@ -3,14 +3,16 @@
 import { revalidatePath } from "next/cache";
 import {
   buildCustomerFactorPayload,
+  getCustomerIntakeCopy,
   initialCustomerIntakeSaveState,
+  LARGE_APPLIANCE_OPTIONS,
   normalizeCustomerPhone,
   parseCustomerIntakeFormData,
   parseOptionalNumber,
   validateCustomerIntake,
   type CustomerIntakeSaveState,
-  LARGE_APPLIANCE_OPTIONS,
 } from "@/lib/customer-intake";
+import { resolveAppLocale } from "@/lib/i18n";
 import {
   createAutomationEvent,
   createCustomer,
@@ -24,13 +26,15 @@ export async function saveCustomerIntake(
   _prevState: CustomerIntakeSaveState = initialCustomerIntakeSaveState,
   formData: FormData,
 ): Promise<CustomerIntakeSaveState> {
+  const locale = resolveAppLocale(formData.get("locale")?.toString());
+  const copy = getCustomerIntakeCopy(locale);
   const value = parseCustomerIntakeFormData(formData);
-  const validation = validateCustomerIntake(value);
+  const validation = validateCustomerIntake(value, locale);
 
   if (!validation.ready) {
     return {
       status: "error",
-      message: validation.message ?? "客户资料还不完整。",
+      message: validation.message ?? copy.validation.fallback,
     };
   }
 
@@ -39,7 +43,7 @@ export async function saveCustomerIntake(
   if (!supabase) {
     return {
       status: "error",
-      message: "Supabase 尚未配置，暂时无法保存客户资料。",
+      message: copy.validation.supabaseMissing,
     };
   }
 
@@ -51,7 +55,7 @@ export async function saveCustomerIntake(
   if (userError || !user) {
     return {
       status: "error",
-      message: "请先登录销售账号，再保存客户资料。",
+      message: copy.validation.loginRequired,
     };
   }
 
@@ -88,6 +92,8 @@ export async function saveCustomerIntake(
       addressText: value.addressText.trim(),
       utilityProvider: "unknown",
       meterPhase: "unknown",
+      latitude: parseOptionalNumber(value.latitude),
+      longitude: parseOptionalNumber(value.longitude),
     });
 
     const powerProfile = await createHouseholdPowerProfile(supabase, {
@@ -134,13 +140,14 @@ export async function saveCustomerIntake(
 
     return {
       status: "success",
-      message: `客户资料已保存到 CRM。客户 ID: ${customer.id.slice(0, 8)}`,
+      message: copy.validation.saveSuccess(customer.id.slice(0, 8)),
       customerId: customer.id,
     };
   } catch (error) {
+    console.error("Customer intake save failed", error);
     return {
       status: "error",
-      message: error instanceof Error ? error.message : "保存客户资料失败，请稍后重试。",
+      message: copy.validation.saveFailed,
     };
   }
 }

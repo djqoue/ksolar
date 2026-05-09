@@ -39,6 +39,6 @@ describe("customer intake", () => {
     });
 
     expect(validation.ready).toBe(false);
-    expect(validation.message).toBe("邮箱格式不正确。");
+    expect(validation.message).toBe("邮箱格式不正确，请检查 @ 和域名。");
   });
 });

@@ -9,14 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { initialAuthActionState, type AuthActionState } from "@/lib/auth/action-state";
 import { DIAL_CODE_OPTIONS } from "@/lib/auth/country-codes";
-import { PASSWORD_RULES } from "@/lib/auth/validation";
+import { getAuthCopy, type AppLocale } from "@/lib/i18n";
 
 interface LoginFormsProps {
   configured: boolean;
   defaultDialCode: string;
+  locale: AppLocale;
 }
 
-export function LoginForms({ configured, defaultDialCode }: LoginFormsProps) {
+export function LoginForms({ configured, defaultDialCode, locale }: LoginFormsProps) {
+  const copy = getAuthCopy(locale);
   const [signInState, signInAction] = useActionState(signInWithEmailPassword, initialAuthActionState);
   const [signUpState, signUpAction] = useActionState(signUpWithEmailPassword, initialAuthActionState);
   const [signUpDialCode, setSignUpDialCode] = useState(defaultDialCode);
@@ -25,14 +27,15 @@ export function LoginForms({ configured, defaultDialCode }: LoginFormsProps) {
     <section className="grid gap-4">
       <Card className="border-white/75 bg-white/90">
         <CardHeader>
-          <CardTitle>邮箱登录</CardTitle>
-          <CardDescription>适合第一阶段内部销售测试，简单、稳定、方便追踪用户 primary id。</CardDescription>
+          <CardTitle>{copy.forms.signInTitle}</CardTitle>
+          <CardDescription>{copy.forms.signInDescription}</CardDescription>
         </CardHeader>
         <CardContent>
           <form action={signInAction} className="grid gap-4" noValidate>
+            <input type="hidden" name="locale" value={locale} />
             <ActionBanner state={signInState} />
             <div className="grid gap-2">
-              <Label htmlFor="signin-email">Email</Label>
+              <Label htmlFor="signin-email">{copy.forms.email}</Label>
               <Input
                 id="signin-email"
                 name="email"
@@ -44,12 +47,12 @@ export function LoginForms({ configured, defaultDialCode }: LoginFormsProps) {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="signin-password">Password</Label>
+              <Label htmlFor="signin-password">{copy.forms.password}</Label>
               <Input id="signin-password" name="password" type="password" autoComplete="current-password" required />
             </div>
-            <AuthSubmitButton pendingLabel="登录中..." disabled={!configured}>
+            <AuthSubmitButton pendingLabel={copy.forms.signInPending} disabled={!configured}>
               <Mail className="size-4" />
-              登录销售工作台
+              {copy.forms.signInSubmit}
             </AuthSubmitButton>
           </form>
         </CardContent>
@@ -57,43 +60,44 @@ export function LoginForms({ configured, defaultDialCode }: LoginFormsProps) {
 
       <Card className="border-white/75 bg-white/90">
         <CardHeader>
-          <CardTitle>注册销售账号</CardTitle>
-          <CardDescription>测试阶段已关闭邮箱和短信验证。注册前只检查邮箱/手机号是否重复。</CardDescription>
+          <CardTitle>{copy.forms.signUpTitle}</CardTitle>
+          <CardDescription>{copy.forms.signUpDescription}</CardDescription>
         </CardHeader>
         <CardContent>
           <form action={signUpAction} className="grid gap-4" noValidate>
+            <input type="hidden" name="locale" value={locale} />
             <ActionBanner state={signUpState} />
             <div className="grid gap-2">
-              <Label htmlFor="signup-name">姓名</Label>
+              <Label htmlFor="signup-name">{copy.forms.displayName}</Label>
               <Input
                 id="signup-name"
                 name="displayName"
-                placeholder="例如 Somchai / 张三"
+                placeholder={copy.forms.displayNamePlaceholder}
                 minLength={2}
                 maxLength={60}
                 autoComplete="name"
                 required
               />
               <p className="text-xs leading-5 text-muted-foreground">
-                2-60 个字符，可包含中英泰文字母、数字、空格、点、连字符或撇号。
+                {copy.forms.displayNameHelper}
               </p>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="signup-email">Email</Label>
+                <Label htmlFor="signup-email">{copy.forms.email}</Label>
                 <Input id="signup-email" name="email" type="text" inputMode="email" autoComplete="email" required />
               </div>
               <PhoneField
                 id="signup-phone"
-                label="Phone"
+                label={copy.forms.phone}
                 dialCode={signUpDialCode}
                 onDialCodeChange={setSignUpDialCode}
                 required={false}
-                helper="选填；会按所选国家区号自动转成国际格式。"
+                helper={copy.forms.phoneHelper}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="signup-password">Password</Label>
+              <Label htmlFor="signup-password">{copy.forms.password}</Label>
               <Input
                 id="signup-password"
                 name="password"
@@ -101,19 +105,19 @@ export function LoginForms({ configured, defaultDialCode }: LoginFormsProps) {
                 minLength={10}
                 maxLength={72}
                 pattern="(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9])\S{10,72}"
-                title="至少 10 位，并包含英文字母、数字和特殊字符，不能包含空格。"
+                title={copy.forms.passwordTitle}
                 autoComplete="new-password"
                 required
               />
               <div className="rounded-2xl border border-border/70 bg-muted/25 p-3 text-xs leading-5 text-muted-foreground">
-                <div className="mb-1 font-semibold text-slate-800">密码规则</div>
-                {PASSWORD_RULES.map((rule) => (
+                <div className="mb-1 font-semibold text-slate-800">{copy.forms.passwordRulesTitle}</div>
+                {copy.forms.passwordRules.map((rule) => (
                   <div key={rule}>- {rule}</div>
                 ))}
               </div>
             </div>
-            <AuthSubmitButton pendingLabel="创建中..." variant="outline" disabled={!configured}>
-              创建账号
+            <AuthSubmitButton pendingLabel={copy.forms.signUpPending} variant="outline" disabled={!configured}>
+              {copy.forms.signUpSubmit}
             </AuthSubmitButton>
           </form>
         </CardContent>
@@ -121,7 +125,7 @@ export function LoginForms({ configured, defaultDialCode }: LoginFormsProps) {
 
       <Card className="border-emerald-200 bg-emerald-50/80">
         <CardContent className="p-5 text-sm leading-6 text-emerald-950">
-          当前测试阶段使用邮箱 + 密码登录，不启用邮箱确认或手机 OTP。正式给销售团队开放前，再决定是否打开短信验证或企业邮箱邀请。
+          {copy.forms.testNotice}
         </CardContent>
       </Card>
     </section>

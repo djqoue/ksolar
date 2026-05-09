@@ -1,7 +1,20 @@
 "use client";
 
-import { useActionState, useMemo } from "react";
-import { BrainCircuit, CheckCircle2, Home, Mail, MessageCircle, Phone, Save, UserRound, Zap, type LucideIcon } from "lucide-react";
+import { useActionState, useMemo, useState } from "react";
+import {
+  BrainCircuit,
+  CheckCircle2,
+  Home,
+  LoaderCircle,
+  LocateFixed,
+  Mail,
+  MessageCircle,
+  Phone,
+  Save,
+  UserRound,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { saveCustomerIntake } from "@/app/(sales)/customer-intake/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,27 +22,35 @@ import { Input } from "@/components/ui/input";
 import {
   EDUCATION_OPTIONS,
   getCustomerIntakeCompletion,
+  getCustomerIntakeCopy,
   initialCustomerIntakeSaveState,
   LARGE_APPLIANCE_OPTIONS,
   validateCustomerIntake,
   type CustomerIntake,
   type LargeApplianceType,
 } from "@/lib/customer-intake";
+import type { AppLocale } from "@/lib/i18n";
 
 interface CustomerIntakeCardProps {
   value: CustomerIntake;
   onChange: (value: CustomerIntake) => void;
+  locale: AppLocale;
 }
 
-export function CustomerIntakeCard({ value, onChange }: CustomerIntakeCardProps) {
+type LocationStatus = "idle" | "loading" | "success" | "error";
+
+export function CustomerIntakeCard({ value, onChange, locale }: CustomerIntakeCardProps) {
+  const copy = getCustomerIntakeCopy(locale);
   const [saveState, saveAction, isSaving] = useActionState(saveCustomerIntake, initialCustomerIntakeSaveState);
-  const completion = useMemo(() => getCustomerIntakeCompletion(value), [value]);
-  const validation = useMemo(() => validateCustomerIntake(value), [value]);
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
+  const [locationMessage, setLocationMessage] = useState("");
+  const completion = useMemo(() => getCustomerIntakeCompletion(value, locale), [locale, value]);
+  const validation = useMemo(() => validateCustomerIntake(value, locale), [locale, value]);
   const annualSpendHint = value.monthlyElectricityBillTHB
     ? `${formatMoney(Number(value.monthlyElectricityBillTHB) * 12)} THB/year`
-    : "填月电费后自动估算";
+    : copy.annualSpendHint;
 
-  const setField = (key: keyof CustomerIntake, nextValue: string) => {
+  const setField = (key: Exclude<keyof CustomerIntake, "largeAppliances">, nextValue: string) => {
     if (key === "monthlyElectricityBillTHB") {
       const monthlyBill = Number(nextValue);
       onChange({
@@ -51,6 +72,63 @@ export function CustomerIntakeCard({ value, onChange }: CustomerIntakeCardProps)
     onChange({ ...value, largeAppliances: nextAppliances });
   };
 
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus("error");
+      setLocationMessage(copy.locationNoBrowser);
+      return;
+    }
+
+    setLocationStatus("loading");
+    setLocationMessage(copy.locating);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const latitude = Number(position.coords.latitude.toFixed(7));
+        const longitude = Number(position.coords.longitude.toFixed(7));
+        let addressText = value.addressText.trim() || formatCoordinates(latitude, longitude);
+
+        try {
+          const response = await fetch(
+            `/api/maps/reverse-geocode?lat=${latitude}&lng=${longitude}&locale=${locale}`,
+            { cache: "no-store" },
+          );
+          const payload = (await response.json()) as { formattedAddress?: string | null };
+
+          if (response.ok && payload.formattedAddress) {
+            addressText = payload.formattedAddress;
+          }
+        } catch {
+          addressText = value.addressText.trim() || formatCoordinates(latitude, longitude);
+        }
+
+        onChange({
+          ...value,
+          addressText,
+          latitude: String(latitude),
+          longitude: String(longitude),
+        });
+        setLocationStatus("success");
+        setLocationMessage(copy.locationCaptured);
+      },
+      (error) => {
+        setLocationStatus("error");
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationMessage(copy.locationBlocked);
+          return;
+        }
+
+        if (error.code === error.TIMEOUT) {
+          setLocationMessage(copy.locationTimeout);
+          return;
+        }
+
+        setLocationMessage(copy.locationFailed);
+      },
+      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 12_000 },
+    );
+  };
+
   return (
     <Card className="border-white/75 bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
       <CardHeader className="pb-3">
@@ -58,11 +136,9 @@ export function CustomerIntakeCard({ value, onChange }: CustomerIntakeCardProps)
           <div>
             <CardTitle className="flex items-center gap-2">
               <UserRound className="size-5 text-emerald-600" />
-              客户快照
+              {copy.title}
             </CardTitle>
-            <CardDescription>
-              先填最重要的客户身份和联系方式。其他潜在评分因子可跳过，后续在 CRM 补全。
-            </CardDescription>
+            <CardDescription>{copy.description}</CardDescription>
           </div>
           <div
             className={`rounded-2xl border px-3 py-2 text-xs font-semibold ${
@@ -71,90 +147,123 @@ export function CustomerIntakeCard({ value, onChange }: CustomerIntakeCardProps)
                 : "border-amber-200 bg-amber-50 text-amber-900"
             }`}
           >
-            {validation.ready ? "必填已完成" : validation.message ?? `缺少：${completion.missing.join("、")}`}
+            {validation.ready ? copy.ready : validation.message ?? `${copy.missingPrefix}: ${completion.missing.join(", ")}`}
           </div>
         </div>
       </CardHeader>
       <CardContent>
         <form action={saveAction} className="grid gap-4">
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="latitude" value={value.latitude} />
+          <input type="hidden" name="longitude" value={value.longitude} />
+
           <div className="grid gap-3 md:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-            <Field label="客户姓名 *" icon={UserRound}>
+            <Field label={copy.fields.displayName} icon={UserRound}>
               <Input
                 name="displayName"
                 value={value.displayName}
                 onChange={(event) => setField("displayName", event.target.value)}
-                placeholder="例如 Somchai / Youwen"
+                placeholder={copy.placeholders.displayName}
                 required
               />
             </Field>
-            <Field label="住址 *" icon={Home}>
-              <Input
-                name="addressText"
-                value={value.addressText}
-                onChange={(event) => setField("addressText", event.target.value)}
-                placeholder="客户住宅地址或项目地点"
-                required
-              />
+            <Field label={copy.fields.addressText} icon={Home}>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <Input
+                  name="addressText"
+                  value={value.addressText}
+                  onChange={(event) => setField("addressText", event.target.value)}
+                  placeholder={copy.placeholders.addressText}
+                  required
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={useCurrentLocation}
+                  disabled={locationStatus === "loading"}
+                  className="whitespace-nowrap"
+                >
+                  {locationStatus === "loading" ? (
+                    <LoaderCircle className="size-4 animate-spin" />
+                  ) : (
+                    <LocateFixed className="size-4" />
+                  )}
+                  {locationStatus === "loading" ? copy.locating : copy.useLocation}
+                </Button>
+              </div>
+              {locationMessage ? (
+                <div
+                  className={`rounded-xl border px-3 py-2 text-xs font-medium ${
+                    locationStatus === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : locationStatus === "error"
+                        ? "border-amber-200 bg-amber-50 text-amber-900"
+                        : "border-slate-200 bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  {locationMessage}
+                </div>
+              ) : null}
             </Field>
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
-            <Field label="电话" icon={Phone}>
+            <Field label={copy.fields.phone} icon={Phone}>
               <Input
                 name="phone"
                 value={value.phone}
                 onChange={(event) => setField("phone", event.target.value)}
-                placeholder="+66812345678 / 0812345678"
+                placeholder={copy.placeholders.phone}
                 inputMode="tel"
               />
             </Field>
-            <Field label="邮箱" icon={Mail}>
+            <Field label={copy.fields.email} icon={Mail}>
               <Input
                 name="email"
                 value={value.email}
                 onChange={(event) => setField("email", event.target.value)}
-                placeholder="customer@email.com"
+                placeholder={copy.placeholders.email}
                 inputMode="email"
               />
             </Field>
-            <Field label="LINE" icon={MessageCircle}>
+            <Field label={copy.fields.lineId} icon={MessageCircle}>
               <Input
                 name="lineId"
                 value={value.lineId}
                 onChange={(event) => setField("lineId", event.target.value)}
-                placeholder="Line ID"
+                placeholder={copy.placeholders.lineId}
               />
             </Field>
           </div>
 
           <details className="rounded-[1.35rem] border border-border/70 bg-muted/20 p-4">
             <summary className="cursor-pointer list-none text-sm font-semibold text-slate-950 marker:hidden">
-              选填：用电画像和客户评分因子
+              {copy.optionalTitle}
               <span className="mt-1 block text-sm font-normal text-muted-foreground">
-                用于后续客户评级、ROI 校准、机器学习和 AI 跟进，不影响当前快速报价。
+                {copy.optionalDescription}
               </span>
             </summary>
             <div className="mt-4 grid gap-4">
               <div className="grid gap-3 md:grid-cols-4">
-                <Field label="年龄" icon={BrainCircuit}>
+                <Field label={copy.fields.age} icon={BrainCircuit}>
                   <Input
                     name="age"
                     value={value.age}
                     onChange={(event) => setField("age", event.target.value)}
-                    placeholder="可跳过"
+                    placeholder={copy.placeholders.optional}
                     inputMode="numeric"
                   />
                 </Field>
-                <Field label="月电费 THB" icon={Zap}>
+                <Field label={copy.fields.monthlyElectricityBillTHB} icon={Zap}>
                   <Input
                     name="monthlyElectricityBillTHB"
                     value={value.monthlyElectricityBillTHB}
                     onChange={(event) => setField("monthlyElectricityBillTHB", event.target.value)}
-                    placeholder="例如 4500"
+                    placeholder={copy.placeholders.monthlyBill}
                     inputMode="decimal"
                   />
                 </Field>
-                <Field label="年电费支出 THB" icon={Zap}>
+                <Field label={copy.fields.annualElectricitySpendTHB} icon={Zap}>
                   <Input
                     name="annualElectricitySpendTHB"
                     value={value.annualElectricitySpendTHB}
@@ -163,19 +272,19 @@ export function CustomerIntakeCard({ value, onChange }: CustomerIntakeCardProps)
                     inputMode="decimal"
                   />
                 </Field>
-                <Field label="年收入 THB" icon={BrainCircuit}>
+                <Field label={copy.fields.annualIncomeTHB} icon={BrainCircuit}>
                   <Input
                     name="annualIncomeTHB"
                     value={value.annualIncomeTHB}
                     onChange={(event) => setField("annualIncomeTHB", event.target.value)}
-                    placeholder="可跳过"
+                    placeholder={copy.placeholders.optional}
                     inputMode="decimal"
                   />
                 </Field>
               </div>
 
               <div className="grid gap-2">
-                <label className="text-sm font-semibold text-slate-900">受教育背景</label>
+                <label className="text-sm font-semibold text-slate-900">{copy.fields.educationBackground}</label>
                 <select
                   name="educationBackground"
                   value={value.educationBackground}
@@ -184,14 +293,14 @@ export function CustomerIntakeCard({ value, onChange }: CustomerIntakeCardProps)
                 >
                   {EDUCATION_OPTIONS.map((option) => (
                     <option key={option.id} value={option.id}>
-                      {option.label}
+                      {copy.educationOptions[option.id]}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div className="grid gap-2">
-                <label className="text-sm font-semibold text-slate-900">大型用电器</label>
+                <label className="text-sm font-semibold text-slate-900">{copy.fields.largeAppliances}</label>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                   {LARGE_APPLIANCE_OPTIONS.map((option) => {
                     const checked = value.largeAppliances.includes(option.id);
@@ -213,7 +322,7 @@ export function CustomerIntakeCard({ value, onChange }: CustomerIntakeCardProps)
                           className="sr-only"
                         />
                         {checked ? <CheckCircle2 className="size-4" /> : null}
-                        {option.label}
+                        {copy.applianceOptions[option.id]}
                       </label>
                     );
                   })}
@@ -221,12 +330,12 @@ export function CustomerIntakeCard({ value, onChange }: CustomerIntakeCardProps)
               </div>
 
               <div className="grid gap-2">
-                <label className="text-sm font-semibold text-slate-900">备注</label>
+                <label className="text-sm font-semibold text-slate-900">{copy.fields.notes}</label>
                 <textarea
                   name="notes"
                   value={value.notes}
                   onChange={(event) => setField("notes", event.target.value)}
-                  placeholder="例如客户对电费敏感、准备买 EV、白天家里有人等"
+                  placeholder={copy.placeholders.notes}
                   className="min-h-24 rounded-2xl border border-input bg-background px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
                 />
               </div>
@@ -246,12 +355,10 @@ export function CustomerIntakeCard({ value, onChange }: CustomerIntakeCardProps)
           ) : null}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm leading-6 text-muted-foreground">
-              必填规则：客户姓名 + 住址 + 电话/邮箱/LINE 任意一种。保存后 CRM 会生成客户 ID。
-            </p>
+            <p className="text-sm leading-6 text-muted-foreground">{copy.requiredRule}</p>
             <Button type="submit" variant="outline" disabled={!validation.ready || isSaving} className="min-w-[150px]">
               <Save className="size-4" />
-              {isSaving ? "保存中..." : "保存到 CRM"}
+              {isSaving ? copy.saving : copy.save}
             </Button>
           </div>
         </form>
@@ -270,13 +377,13 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="grid gap-2">
+    <div className="grid gap-2">
       <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
         <Icon className="size-4 text-emerald-600" />
         {label}
       </span>
       {children}
-    </label>
+    </div>
   );
 }
 
@@ -286,4 +393,8 @@ function formatMoney(value: number) {
   }
 
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+}
+
+function formatCoordinates(latitude: number, longitude: number) {
+  return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
 }

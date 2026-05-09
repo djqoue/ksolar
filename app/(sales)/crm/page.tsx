@@ -1,10 +1,13 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ComponentType } from "react";
 import { ArrowLeft, BarChart3, Database, FileText, Users } from "lucide-react";
 import { CrmLogoutButton } from "@/components/crm-logout-button";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getCrmCopy, LOCALE_COOKIE_NAME, resolveAppLocale } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +22,9 @@ async function getCount(supabase: NonNullable<Awaited<ReturnType<typeof createSu
 }
 
 export default async function CrmPage() {
+  const cookieStore = await cookies();
+  const locale = resolveAppLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
+  const crmCopy = getCrmCopy(locale);
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
@@ -26,7 +32,7 @@ export default async function CrmPage() {
       <main className="ksolar-shell min-h-screen px-4 py-8">
         <Card className="mx-auto max-w-3xl border-amber-300 bg-amber-50">
           <CardContent className="p-6 text-sm leading-6 text-amber-950">
-            Supabase 尚未配置。请先设置环境变量并运行数据库 migration。
+            {crmCopy.notConfigured}
           </CardContent>
         </Card>
       </main>
@@ -55,21 +61,22 @@ export default async function CrmPage() {
       <div className="mx-auto grid max-w-6xl gap-5">
         <header className="premium-panel flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="section-kicker">Sales CRM</div>
-            <h1 className="mt-1 text-3xl font-semibold tracking-[-0.055em] text-slate-950">销售工作台</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              User primary id: <span className="font-mono text-slate-800">{user.id}</span>
+            <div className="section-kicker">{crmCopy.sectionKicker}</div>
+            <h1 className="mt-1 text-3xl font-semibold tracking-[-0.055em] text-slate-950">{crmCopy.title}</h1>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+              {crmCopy.userPrimaryId}: <span className="break-all font-mono text-slate-800">{user.id}</span>
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <LanguageSwitcher locale={locale} />
             <Button asChild variant="default">
               <Link href="/">
                 <ArrowLeft className="size-4" />
-                返回报价工具
+                {crmCopy.returnToQuote}
               </Link>
             </Button>
             <form action="/logout" method="post">
-              <CrmLogoutButton />
+              <CrmLogoutButton label={crmCopy.signOut} pendingLabel={crmCopy.signingOut} />
             </form>
           </div>
         </header>
@@ -77,29 +84,29 @@ export default async function CrmPage() {
         {hasMigrationError ? (
           <Card className="border-amber-300 bg-amber-50">
             <CardContent className="p-5 text-sm leading-6 text-amber-950">
-              已登录，但 CRM 数据表还不可用。请在 Supabase SQL Editor 执行
-              <span className="mx-1 font-mono">db/migrations/202605080001_crm_foundation.sql</span>
-              后再刷新。
+              {crmCopy.migrationWarning}
             </CardContent>
           </Card>
         ) : null}
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard icon={Users} label="客户" value={customers.count} />
-          <MetricCard icon={BarChart3} label="商机" value={opportunities.count} />
-          <MetricCard icon={FileText} label="报价项目" value={quotes.count} />
-          <MetricCard icon={Database} label="拜访记录" value={visits.count} />
+          <MetricCard icon={Users} label={crmCopy.metrics.customers} value={customers.count} />
+          <MetricCard icon={BarChart3} label={crmCopy.metrics.opportunities} value={opportunities.count} />
+          <MetricCard icon={FileText} label={crmCopy.metrics.quotes} value={quotes.count} />
+          <MetricCard icon={Database} label={crmCopy.metrics.visits} value={visits.count} />
         </section>
 
         <Card className="border-white/75 bg-white/90">
           <CardHeader>
-            <CardTitle>下一步模块</CardTitle>
-            <CardDescription>先把数据主链路建稳，再接自动化。</CardDescription>
+            <CardTitle>{crmCopy.nextModulesTitle}</CardTitle>
+            <CardDescription>{crmCopy.nextModulesDescription}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 text-sm leading-6 text-slate-700">
-            <p>1. 客户建档：姓名、手机号、LINE、地址、PEA/MEA、电表相位、家庭用电资料。</p>
-            <p>2. 报价保存：每次报价生成 quote id，并把输入、结果、BOM、金融方案保存为不可变 snapshot。</p>
-            <p>3. 自动化事件：报价接受后写入 `automation_events`，后续可流转仓库备货、施工排期和售后提醒。</p>
+            {crmCopy.nextModules.map((item, index) => (
+              <p key={item}>
+                {index + 1}. {item}
+              </p>
+            ))}
           </CardContent>
         </Card>
       </div>

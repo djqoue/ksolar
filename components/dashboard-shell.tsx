@@ -19,8 +19,8 @@ import { calculateQuoteScenario } from "@/lib/calc";
 import { FINANCE_PRODUCTS } from "@/lib/config/finance-products";
 import { DEFAULT_PANEL_ID, findPanel, getPanelAreaM2 } from "@/lib/config/panel-catalog";
 import { CAPACITY_TIERS, DEFAULT_TOPOLOGY, SOLAR_DEFAULTS } from "@/lib/config/solar";
-import { initialCustomerIntake, validateCustomerIntake } from "@/lib/customer-intake";
-import { getLocalizedPresetMeta, LANGUAGE_OPTIONS, type AppLocale } from "@/lib/i18n";
+import { getCustomerIntakeCopy, initialCustomerIntake, validateCustomerIntake } from "@/lib/customer-intake";
+import { getLocalizedPresetMeta, LANGUAGE_OPTIONS, LOCALE_COOKIE_NAME, type AppLocale } from "@/lib/i18n";
 import { createEmptyMapSelection } from "@/lib/maps";
 import { requestSolarDataLayers, requestSolarInsights } from "@/lib/solar-client";
 import {
@@ -57,8 +57,12 @@ interface StageFrameProps {
   footer: ReactNode;
 }
 
-export function DashboardShell() {
-  const [locale, setLocale] = useState<AppLocale>("zh");
+interface DashboardShellProps {
+  initialLocale?: AppLocale;
+}
+
+export function DashboardShell({ initialLocale = "zh" }: DashboardShellProps) {
+  const [locale, setLocale] = useState<AppLocale>(initialLocale);
 
   return (
     <LocaleProvider locale={locale} setLocale={setLocale}>
@@ -70,6 +74,7 @@ export function DashboardShell() {
 function DashboardShellContent() {
   const { locale, setLocale } = useLocaleContext();
   const copy = useAppCopy();
+  const customerCopy = getCustomerIntakeCopy(locale);
   const [mapSelection, setMapSelection] = useState<MapSelectionSummary>(createEmptyMapSelection());
   const [topology, setTopology] = useState(DEFAULT_TOPOLOGY);
   const [pricingPresetId, setPricingPresetId] = useState<PricingPreset["id"]>("standard");
@@ -94,7 +99,7 @@ function DashboardShellContent() {
   const [solarErrorMessage, setSolarErrorMessage] = useState<string | null>(null);
   const crmEnabled = isSupabaseConfigured();
 
-  const customerValidation = useMemo(() => validateCustomerIntake(customerIntake), [customerIntake]);
+  const customerValidation = useMemo(() => validateCustomerIntake(customerIntake, locale), [customerIntake, locale]);
   const roofDone = mapSelection.grossAreaM2 > 0;
   const step1Done = roofDone && customerValidation.ready;
   const step2Done = step1Done;
@@ -272,8 +277,8 @@ function DashboardShellContent() {
 
   const roofSummaryItems = [
     {
-      label: "客户资料",
-      value: customerValidation.ready ? "Ready" : "Missing",
+      label: customerCopy.title,
+      value: customerValidation.ready ? customerCopy.ready : customerCopy.missingPrefix,
     },
     {
       label: copy.solar.roofSelectionCount,
@@ -399,6 +404,7 @@ function DashboardShellContent() {
                 onClick={() => {
                   startTransition(() => {
                     setLocale(option.value);
+                    document.cookie = `${LOCALE_COOKIE_NAME}=${option.value}; path=/; max-age=31536000; SameSite=Lax`;
                   });
                 }}
               >
@@ -459,7 +465,7 @@ function DashboardShellContent() {
                     {step1Done
                       ? `${copy.map.grossArea}: ${formatNumber(mapSelection.grossAreaM2, 1)} m²`
                       : !customerValidation.ready
-                        ? customerValidation.message ?? `先补齐客户必填信息：${customerValidation.missing.join("、")}`
+                        ? customerValidation.message ?? customerCopy.validation.fallback
                         : copy.map.step1Body}
                   </p>
                   <Button disabled={!step1Done} size="lg" className="min-w-[180px]" onClick={() => setActiveStep(2)}>
@@ -470,7 +476,7 @@ function DashboardShellContent() {
               }
             >
               <div className="grid gap-4">
-                <CustomerIntakeCard value={customerIntake} onChange={setCustomerIntake} />
+                <CustomerIntakeCard value={customerIntake} onChange={setCustomerIntake} locale={locale} />
                 <Map
                   value={mapSelection}
                   onChange={handleMapSelectionChange}

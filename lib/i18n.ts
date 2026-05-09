@@ -12,6 +12,283 @@ export const LANGUAGE_OPTIONS: Array<{ value: AppLocale; label: string }> = [
   { value: "th", label: "ไทย" },
 ];
 
+export const LOCALE_COOKIE_NAME = "ksolar_locale";
+
+export function resolveAppLocale(value?: string | null): AppLocale {
+  if (value === "en" || value === "zh" || value === "th") {
+    return value;
+  }
+
+  return "zh";
+}
+
+export const CRM_COPY = {
+  en: {
+    sectionKicker: "Sales CRM",
+    title: "Sales workspace",
+    userPrimaryId: "User primary ID",
+    returnToQuote: "Back to quote tool",
+    signOut: "Sign out",
+    signingOut: "Signing out...",
+    languageTitle: "Language",
+    notConfigured: "Supabase is not configured yet. Add the environment variables and run the database migrations first.",
+    migrationWarning: "You are signed in, but the CRM tables are not available yet. Run the CRM migration in Supabase SQL Editor, then refresh this page.",
+    metrics: {
+      customers: "Customers",
+      opportunities: "Opportunities",
+      quotes: "Quotes",
+      visits: "Visits",
+    },
+    nextModulesTitle: "Next modules",
+    nextModulesDescription: "Stabilize the data chain first, then connect automation.",
+    nextModules: [
+      "Customer profile: name, phone, LINE, address, PEA/MEA, meter phase, and household load signals.",
+      "Quote archive: every proposal gets a quote ID with inputs, outputs, BOM, finance plan, and a locked snapshot.",
+      "Automation events: accepted quotes create events for warehouse reservation, installer matching, and after-sales reminders.",
+    ],
+  },
+  zh: {
+    sectionKicker: "Sales CRM",
+    title: "销售工作台",
+    userPrimaryId: "用户主 ID",
+    returnToQuote: "返回报价工具",
+    signOut: "退出登录",
+    signingOut: "退出中...",
+    languageTitle: "语言",
+    notConfigured: "Supabase 尚未配置。请先设置环境变量并运行数据库 migration。",
+    migrationWarning: "你已经登录，但 CRM 数据表还不可用。请先在 Supabase SQL Editor 执行 CRM migration，然后刷新页面。",
+    metrics: {
+      customers: "客户",
+      opportunities: "商机",
+      quotes: "报价项目",
+      visits: "拜访记录",
+    },
+    nextModulesTitle: "下一步模块",
+    nextModulesDescription: "先把数据主链路建稳，再接自动化。",
+    nextModules: [
+      "客户建档：姓名、手机号、LINE、地址、PEA/MEA、电表相位、家庭用电资料。",
+      "报价保存：每次报价生成 quote ID，并把输入、结果、BOM、金融方案保存为不可变快照。",
+      "自动化事件：报价接受后写入 automation events，后续可流转仓库备货、施工排期和售后提醒。",
+    ],
+  },
+  th: {
+    sectionKicker: "Sales CRM",
+    title: "พื้นที่ทำงานฝ่ายขาย",
+    userPrimaryId: "รหัสผู้ใช้หลัก",
+    returnToQuote: "กลับไปหน้าเสนอราคา",
+    signOut: "ออกจากระบบ",
+    signingOut: "กำลังออกจากระบบ...",
+    languageTitle: "ภาษา",
+    notConfigured: "ยังไม่ได้ตั้งค่า Supabase กรุณาเพิ่ม environment variables และรัน database migration ก่อน",
+    migrationWarning: "เข้าสู่ระบบแล้ว แต่ตาราง CRM ยังไม่พร้อม กรุณารัน CRM migration ใน Supabase SQL Editor แล้วรีเฟรชหน้านี้",
+    metrics: {
+      customers: "ลูกค้า",
+      opportunities: "ดีล",
+      quotes: "ใบเสนอราคา",
+      visits: "บันทึกเยี่ยมลูกค้า",
+    },
+    nextModulesTitle: "โมดูลถัดไป",
+    nextModulesDescription: "วางโครงข้อมูลหลักให้แน่นก่อน แล้วค่อยต่อระบบอัตโนมัติ",
+    nextModules: [
+      "โปรไฟล์ลูกค้า: ชื่อ เบอร์โทร LINE ที่อยู่ PEA/MEA เฟสมิเตอร์ และข้อมูลการใช้ไฟในบ้าน",
+      "บันทึกใบเสนอราคา: ทุกข้อเสนอมี quote ID พร้อมข้อมูลนำเข้า ผลลัพธ์ BOM แผนการเงิน และ snapshot ที่ตรวจสอบย้อนหลังได้",
+      "เหตุการณ์อัตโนมัติ: เมื่อลูกค้ายอมรับข้อเสนอ ระบบจะสร้าง event สำหรับจองสต็อก จัดทีมติดตั้ง และเตือนงานหลังการขาย",
+    ],
+  },
+} as const;
+
+export function getCrmCopy(locale: AppLocale) {
+  return CRM_COPY[locale];
+}
+
+export const AUTH_COPY = {
+  en: {
+    page: {
+      title: "KSolar Sales OS",
+      description:
+        "Every sales account, customer, site, and proposal keeps a stable primary ID so management can trace the full path from lead to quote, BOM, and automation events.",
+      bullets: [
+        "Sales user ID = Supabase auth.users.id",
+        "Customer ID = customers.id, the anchor for SRM customer data",
+        "Quote ID = quote_versions.id, storing every proposal snapshot",
+        "Automation events reserve clean hooks for ordering, stock, installers, and after-sales follow-up",
+      ],
+      supabaseMissing:
+        "Supabase is not configured yet. Before enabling accounts in production, set these Vercel Environment Variables:",
+    },
+    forms: {
+      signInTitle: "Email sign in",
+      signInDescription: "Best for the first internal sales test: simple, stable, and easy to trace by primary ID.",
+      email: "Email",
+      password: "Password",
+      signInPending: "Signing in...",
+      signInSubmit: "Open sales workspace",
+      signUpTitle: "Create sales account",
+      signUpDescription: "Email and SMS verification are off for the test phase. We only check duplicate email or phone.",
+      displayName: "Name",
+      displayNamePlaceholder: "e.g. Somchai / Youwen",
+      displayNameHelper: "2-60 characters. Chinese, English, Thai, numbers, spaces, dots, hyphens, and apostrophes are allowed.",
+      phone: "Phone",
+      phoneHelper: "Optional. The selected country code will convert the number to international format.",
+      passwordTitle: "At least 10 characters with letters, numbers, and one special character. No spaces.",
+      passwordRulesTitle: "Password rules",
+      passwordRules: [
+        "At least 10 characters",
+        "Include letters and numbers",
+        "Include one special character such as ! @ # %",
+        "No spaces or common weak passwords",
+      ],
+      signUpPending: "Creating...",
+      signUpSubmit: "Create account",
+      testNotice:
+        "This test phase uses email + password only. Email confirmation and phone OTP are off; we can enable SMS or company email invitations before opening to the full sales team.",
+    },
+    messages: {
+      invalidCredentials: "The email or password is not correct. Verification is off for testing, so please check the account and password.",
+      emailNotConfirmed: "The backend still requires email confirmation. For testing, ask an admin to disable email confirmation in Supabase Auth.",
+      emailRegistered: "This email is already registered. Sign in instead, or use another email.",
+      passwordInvalid: "Password does not meet the rules: use at least 10 characters with letters, numbers, and a special character.",
+      availabilityFailed: (message: string) => `Could not check duplicate account details: ${message}`,
+      phoneRegistered: "This phone number is already registered. Sign in instead, or use another number.",
+      supabaseLoginMissing: "Supabase is not configured yet, so sign in is unavailable.",
+      invalidEmail: "Enter a valid email address.",
+      missingPassword: "Enter your password.",
+      supabaseSignupMissing: "Supabase is not configured yet, so account creation is unavailable.",
+      invalidName: "Name should be 2-60 characters and cannot contain links.",
+      invalidPhone: "Use international phone format, for example +66812345678.",
+      invalidSignup: "Please check the sign-up details and try again.",
+      signupSuccess: "Account created. Verification is off for testing; if the app does not open automatically, sign in with your email and password.",
+      supabaseOtpMissing: "Supabase is not configured yet, so OTP cannot be sent.",
+      missingPhone: "Enter a phone number.",
+      otpSent: "OTP sent. If no SMS arrives, check that the Supabase SMS provider is enabled.",
+    },
+  },
+  zh: {
+    page: {
+      title: "KSolar Sales OS",
+      description:
+        "每个销售账号、客户、项目地点和报价方案都有稳定 primary ID。后续管理层可以从账号穿透到客户资料、拜访记录、报价版本、BOM 和自动化事件。",
+      bullets: [
+        "销售账号 ID = Supabase auth.users.id",
+        "客户 ID = customers.id，集中挂载 SRM 客群信息",
+        "报价 ID = quote_versions.id，保存每次报价 snapshot",
+        "自动化事件 = automation_events，预留下单、备货、施工和售后接口",
+      ],
+      supabaseMissing: "Supabase 尚未配置。上线账号功能前，请在 Vercel Environment Variables 设置：",
+    },
+    forms: {
+      signInTitle: "邮箱登录",
+      signInDescription: "适合第一阶段内部销售测试，简单、稳定、方便追踪用户 primary ID。",
+      email: "Email",
+      password: "Password",
+      signInPending: "登录中...",
+      signInSubmit: "登录销售工作台",
+      signUpTitle: "注册销售账号",
+      signUpDescription: "测试阶段已关闭邮箱和短信验证。注册前只检查邮箱/手机号是否重复。",
+      displayName: "姓名",
+      displayNamePlaceholder: "例如 Somchai / 张三",
+      displayNameHelper: "2-60 个字符，可包含中英泰文字母、数字、空格、点、连字符或撇号。",
+      phone: "Phone",
+      phoneHelper: "选填；会按所选国家区号自动转成国际格式。",
+      passwordTitle: "至少 10 位，并包含英文字母、数字和特殊字符，不能包含空格。",
+      passwordRulesTitle: "密码规则",
+      passwordRules: [
+        "至少 10 位",
+        "同时包含英文字母和数字",
+        "至少 1 个特殊字符，例如 ! @ # %",
+        "不能包含空格或常见弱密码",
+      ],
+      signUpPending: "创建中...",
+      signUpSubmit: "创建账号",
+      testNotice:
+        "当前测试阶段使用邮箱 + 密码登录，不启用邮箱确认或手机 OTP。正式给销售团队开放前，再决定是否打开短信验证或企业邮箱邀请。",
+    },
+    messages: {
+      invalidCredentials: "邮箱或密码不正确。测试阶段已关闭邮箱/短信验证，请确认账号和密码是否正确。",
+      emailNotConfirmed: "后台仍要求邮箱确认。测试阶段应关闭邮箱验证，请联系管理员检查 Supabase Auth 设置。",
+      emailRegistered: "这个邮箱已经注册过，请直接登录或换一个邮箱。",
+      passwordInvalid: "密码不符合规则：至少 10 位，并包含字母、数字和特殊字符。",
+      availabilityFailed: (message: string) => `账号重复检查失败：${message}`,
+      phoneRegistered: "这个手机号已经注册过，请直接登录或换一个手机号。",
+      supabaseLoginMissing: "Supabase 尚未配置，暂时无法登录。",
+      invalidEmail: "邮箱格式不正确，请检查 @ 和域名。",
+      missingPassword: "请输入密码。",
+      supabaseSignupMissing: "Supabase 尚未配置，暂时无法注册。",
+      invalidName: "姓名需为 2-60 个字符，且不能包含链接。",
+      invalidPhone: "手机号格式不正确。可输入泰国本地号码 0812345678，系统会自动转成 +66812345678。",
+      invalidSignup: "注册信息不符合规则，请检查后再试。",
+      signupSuccess: "账号已创建。测试阶段已关闭邮箱/短信验证；如果没有自动进入系统，请直接用邮箱和密码登录。",
+      supabaseOtpMissing: "Supabase 尚未配置，暂时无法发送 OTP。",
+      missingPhone: "请输入手机号。",
+      otpSent: "OTP 已发送。如果收不到短信，请确认 Supabase SMS provider 已启用。",
+    },
+  },
+  th: {
+    page: {
+      title: "KSolar Sales OS",
+      description:
+        "ทุกบัญชีฝ่ายขาย ลูกค้า สถานที่ติดตั้ง และใบเสนอราคาจะมี primary ID ที่ชัดเจน เพื่อให้ผู้จัดการติดตามจากลูกค้าไปถึง BOM และ automation ได้ครบเส้นทาง",
+      bullets: [
+        "รหัสฝ่ายขาย = Supabase auth.users.id",
+        "รหัสลูกค้า = customers.id สำหรับเก็บข้อมูล SRM ของลูกค้า",
+        "รหัสใบเสนอราคา = quote_versions.id เพื่อเก็บ snapshot ของทุกข้อเสนอ",
+        "automation_events เตรียมทางเชื่อมสำหรับสั่งซื้อ จองสต็อก ทีมติดตั้ง และติดตามหลังการขาย",
+      ],
+      supabaseMissing: "ยังไม่ได้ตั้งค่า Supabase ก่อนเปิดใช้บัญชีจริง กรุณาตั้งค่า Vercel Environment Variables:",
+    },
+    forms: {
+      signInTitle: "เข้าสู่ระบบด้วยอีเมล",
+      signInDescription: "เหมาะกับช่วงทดสอบทีมขายภายใน ใช้ง่าย เสถียร และตามรอยด้วย primary ID ได้ชัดเจน",
+      email: "อีเมล",
+      password: "รหัสผ่าน",
+      signInPending: "กำลังเข้าสู่ระบบ...",
+      signInSubmit: "เข้าสู่พื้นที่ทำงานฝ่ายขาย",
+      signUpTitle: "สร้างบัญชีฝ่ายขาย",
+      signUpDescription: "ช่วงทดสอบปิดการยืนยันอีเมลและ SMS ไว้ ระบบจะตรวจเฉพาะอีเมลหรือเบอร์ซ้ำ",
+      displayName: "ชื่อ",
+      displayNamePlaceholder: "เช่น Somchai / Youwen",
+      displayNameHelper: "2-60 ตัวอักษร ใช้จีน อังกฤษ ไทย ตัวเลข เว้นวรรค จุด ขีดกลาง และ apostrophe ได้",
+      phone: "เบอร์โทร",
+      phoneHelper: "ไม่บังคับ ระบบจะแปลงเบอร์ตามรหัสประเทศที่เลือกเป็นรูปแบบสากล",
+      passwordTitle: "อย่างน้อย 10 ตัว มีตัวอักษร ตัวเลข และอักขระพิเศษ ห้ามมีช่องว่าง",
+      passwordRulesTitle: "กฎรหัสผ่าน",
+      passwordRules: [
+        "อย่างน้อย 10 ตัวอักษร",
+        "มีทั้งตัวอักษรและตัวเลข",
+        "มีอักขระพิเศษอย่างน้อย 1 ตัว เช่น ! @ # %",
+        "ไม่มีช่องว่างหรือรหัสผ่านที่เดาง่าย",
+      ],
+      signUpPending: "กำลังสร้าง...",
+      signUpSubmit: "สร้างบัญชี",
+      testNotice:
+        "ช่วงทดสอบนี้ใช้อีเมล + รหัสผ่านเท่านั้น ยังไม่เปิดยืนยันอีเมลหรือ OTP ทางมือถือ ก่อนเปิดให้ทีมขายทั้งหมดค่อยตัดสินใจเรื่อง SMS หรือเชิญผ่านอีเมลองค์กร",
+    },
+    messages: {
+      invalidCredentials: "อีเมลหรือรหัสผ่านไม่ถูกต้อง ช่วงทดสอบปิดการยืนยันไว้ กรุณาตรวจบัญชีและรหัสผ่านอีกครั้ง",
+      emailNotConfirmed: "ระบบหลังบ้านยังบังคับยืนยันอีเมลอยู่ สำหรับช่วงทดสอบควรปิดใน Supabase Auth",
+      emailRegistered: "อีเมลนี้ถูกใช้แล้ว กรุณาเข้าสู่ระบบหรือใช้อีเมลอื่น",
+      passwordInvalid: "รหัสผ่านยังไม่ตรงกฎ: อย่างน้อย 10 ตัว มีตัวอักษร ตัวเลข และอักขระพิเศษ",
+      availabilityFailed: (message: string) => `ตรวจข้อมูลซ้ำไม่สำเร็จ: ${message}`,
+      phoneRegistered: "เบอร์นี้ถูกใช้แล้ว กรุณาเข้าสู่ระบบหรือใช้เบอร์อื่น",
+      supabaseLoginMissing: "ยังไม่ได้ตั้งค่า Supabase จึงยังเข้าสู่ระบบไม่ได้",
+      invalidEmail: "รูปแบบอีเมลไม่ถูกต้อง กรุณาตรวจสอบ @ และโดเมน",
+      missingPassword: "กรุณาใส่รหัสผ่าน",
+      supabaseSignupMissing: "ยังไม่ได้ตั้งค่า Supabase จึงยังสร้างบัญชีไม่ได้",
+      invalidName: "ชื่อควรมี 2-60 ตัวอักษร และห้ามใส่ลิงก์",
+      invalidPhone: "รูปแบบเบอร์โทรไม่ถูกต้อง เช่น เบอร์ไทย 0812345678 ระบบจะแปลงเป็น +66812345678",
+      invalidSignup: "ข้อมูลสมัครยังไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง",
+      signupSuccess: "สร้างบัญชีแล้ว ช่วงทดสอบปิดการยืนยันไว้ หากระบบไม่พาเข้าอัตโนมัติ ให้เข้าสู่ระบบด้วยอีเมลและรหัสผ่าน",
+      supabaseOtpMissing: "ยังไม่ได้ตั้งค่า Supabase จึงส่ง OTP ไม่ได้",
+      missingPhone: "กรุณาใส่เบอร์โทร",
+      otpSent: "ส่ง OTP แล้ว หากไม่ได้รับ SMS ให้ตรวจสอบว่าเปิด Supabase SMS provider แล้ว",
+    },
+  },
+} as const;
+
+export function getAuthCopy(locale: AppLocale) {
+  return AUTH_COPY[locale];
+}
+
 export const APP_COPY = {
   en: {
     language: {

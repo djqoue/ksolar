@@ -12,6 +12,7 @@ import {
   validatePassword,
   validatePhone,
 } from "@/lib/auth/validation";
+import { getAuthCopy, resolveAppLocale } from "@/lib/i18n";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function formValue(formData: FormData, key: string) {
@@ -27,23 +28,25 @@ function succeed(message: string): AuthActionState {
   return { status: "success", message };
 }
 
-function mapAuthErrorMessage(message: string) {
+type AuthCopy = ReturnType<typeof getAuthCopy>;
+
+function mapAuthErrorMessage(message: string, copy: AuthCopy) {
   const normalizedMessage = message.toLowerCase();
 
   if (normalizedMessage.includes("invalid login credentials")) {
-    return "邮箱或密码不正确。测试阶段已关闭邮箱/短信验证，请确认账号和密码是否正确。";
+    return copy.messages.invalidCredentials;
   }
 
   if (normalizedMessage.includes("email not confirmed")) {
-    return "后台仍要求邮箱确认。测试阶段应关闭邮箱验证，请联系管理员检查 Supabase Auth 设置。";
+    return copy.messages.emailNotConfirmed;
   }
 
   if (normalizedMessage.includes("already registered") || normalizedMessage.includes("user already exists")) {
-    return "这个邮箱已经注册过，请直接登录或换一个邮箱。";
+    return copy.messages.emailRegistered;
   }
 
   if (normalizedMessage.includes("password")) {
-    return "密码不符合规则：至少 10 位，并包含字母、数字和特殊字符。";
+    return copy.messages.passwordInvalid;
   }
 
   return message;
@@ -56,7 +59,7 @@ function getPhoneFromForm(formData: FormData) {
   );
 }
 
-async function getIdentifierAvailabilityError(supabase: SupabaseClient, email: string, phone: string) {
+async function getIdentifierAvailabilityError(supabase: SupabaseClient, email: string, phone: string, copy: AuthCopy) {
   const { data, error } = await supabase
     .rpc("check_sales_identifier_available", {
       requested_email: email,
@@ -65,27 +68,28 @@ async function getIdentifierAvailabilityError(supabase: SupabaseClient, email: s
     .single();
 
   if (error) {
-    return `账号重复检查失败：${error.message}`;
+    return copy.messages.availabilityFailed(error.message);
   }
 
   const availability = data as { email_available?: boolean; phone_available?: boolean } | null;
 
   if (availability?.email_available === false) {
-    return "这个邮箱已经注册过，请直接登录或换一个邮箱。";
+    return copy.messages.emailRegistered;
   }
 
   if (phone && availability?.phone_available === false) {
-    return "这个手机号已经注册过，请直接登录或换一个手机号。";
+    return copy.messages.phoneRegistered;
   }
 
   return null;
 }
 
 export async function signInWithEmailPassword(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {
+  const copy = getAuthCopy(resolveAppLocale(formData.get("locale")?.toString()));
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
-    return fail("Supabase 尚未配置，暂时无法登录。");
+    return fail(copy.messages.supabaseLoginMissing);
   }
 
   const email = normalizeEmail(formValue(formData, "email"));
@@ -94,17 +98,17 @@ export async function signInWithEmailPassword(_prevState: AuthActionState, formD
   const emailValidation = validateEmail(email);
 
   if (!emailValidation.valid) {
-    return fail(emailValidation.message || "邮箱格式不正确。");
+    return fail(copy.messages.invalidEmail);
   }
 
   if (!password) {
-    return fail("请输入密码。");
+    return fail(copy.messages.missingPassword);
   }
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    return fail(mapAuthErrorMessage(error.message));
+    return fail(mapAuthErrorMessage(error.message, copy));
   }
 
   revalidatePath("/", "layout");
@@ -112,10 +116,11 @@ export async function signInWithEmailPassword(_prevState: AuthActionState, formD
 }
 
 export async function signUpWithEmailPassword(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {
+  const copy = getAuthCopy(resolveAppLocale(formData.get("locale")?.toString()));
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
-    return fail("Supabase 尚未配置，暂时无法注册。");
+    return fail(copy.messages.supabaseSignupMissing);
   }
 
   const email = normalizeEmail(formValue(formData, "email"));
@@ -124,19 +129,19 @@ export async function signUpWithEmailPassword(_prevState: AuthActionState, formD
   const displayName = formValue(formData, "displayName").replace(/\s+/g, " ");
 
   const validations = [
-    validateDisplayName(displayName),
-    validateEmail(email),
-    validatePhone(phone),
-    validatePassword(password),
+    { valid: validateDisplayName(displayName).valid, message: copy.messages.invalidName },
+    { valid: validateEmail(email).valid, message: copy.messages.invalidEmail },
+    { valid: validatePhone(phone).valid, message: copy.messages.invalidPhone },
+    { valid: validatePassword(password).valid, message: copy.messages.passwordInvalid },
   ];
 
   const invalidValidation = validations.find((validation) => !validation.valid);
 
   if (invalidValidation) {
-    return fail(invalidValidation.message || "注册信息不符合规则。");
+    return fail(invalidValidation.message || copy.messages.invalidSignup);
   }
 
-  const availabilityError = await getIdentifierAvailabilityError(supabase, email, phone);
+  const availabilityError = await getIdentifierAvailabilityError(supabase, email, phone, copy);
 
   if (availabilityError) {
     return fail(availabilityError);
@@ -154,23 +159,24 @@ export async function signUpWithEmailPassword(_prevState: AuthActionState, formD
   });
 
   if (error) {
-    return fail(mapAuthErrorMessage(error.message));
+    return fail(mapAuthErrorMessage(error.message, copy));
   }
 
   revalidatePath("/", "layout");
 
   if (!data.session) {
-    return succeed("账号已创建。测试阶段已关闭邮箱/短信验证；如果没有自动进入系统，请直接用邮箱和密码登录。");
+    return succeed(copy.messages.signupSuccess);
   }
 
   redirect("/");
 }
 
 export async function sendPhoneOtp(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {
+  const copy = getAuthCopy(resolveAppLocale(formData.get("locale")?.toString()));
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
-    return fail("Supabase 尚未配置，暂时无法发送 OTP。");
+    return fail(copy.messages.supabaseOtpMissing);
   }
 
   const phone = getPhoneFromForm(formData);
@@ -178,16 +184,16 @@ export async function sendPhoneOtp(_prevState: AuthActionState, formData: FormDa
   const phoneValidation = validatePhone(phone);
 
   if (!phoneValidation.valid || !phone) {
-    return fail(phoneValidation.message || "请输入手机号。");
+    return fail(copy.messages.missingPhone);
   }
 
   const { error } = await supabase.auth.signInWithOtp({ phone });
 
   if (error) {
-    return fail(mapAuthErrorMessage(error.message));
+    return fail(mapAuthErrorMessage(error.message, copy));
   }
 
-  return succeed("OTP 已发送。如果收不到短信，请确认 Supabase SMS provider 已启用。");
+  return succeed(copy.messages.otpSent);
 }
 
 export async function signOut() {
