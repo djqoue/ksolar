@@ -1018,8 +1018,15 @@ function StageFrame({ icon: Icon, stepNumber, tone, title, description, signal, 
 }
 
 function parseCustomerFocusPoint(value: typeof initialCustomerIntake): SolarLatLng | null {
-  const latitude = Number(value.latitude);
-  const longitude = Number(value.longitude);
+  const latitudeText = value.latitude.trim();
+  const longitudeText = value.longitude.trim();
+
+  if (!latitudeText || !longitudeText) {
+    return null;
+  }
+
+  const latitude = Number(latitudeText);
+  const longitude = Number(longitudeText);
 
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     return null;

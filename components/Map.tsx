@@ -382,8 +382,20 @@ export function Map({
     if (trimmedAddress) {
       setSearchValue(trimmedAddress);
       void geocodeSearchValue(trimmedAddress, true);
+      return;
     }
-  }, [copy.map.statusCurrentLocation, flyToMapCenter, focusAddress, focusPoint, focusRequestId, geocodeSearchValue, isLoaded]);
+
+    flyToMapCenter(DEFAULT_MAP_CENTER, copy.map.statusDefaultBangkok);
+  }, [
+    copy.map.statusCurrentLocation,
+    copy.map.statusDefaultBangkok,
+    flyToMapCenter,
+    focusAddress,
+    focusPoint,
+    focusRequestId,
+    geocodeSearchValue,
+    isLoaded,
+  ]);
 
   const handleSearchClick = () => {
     const trimmedSearch = searchValue.trim();
