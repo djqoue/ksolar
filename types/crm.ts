@@ -36,6 +36,10 @@ export interface Customer {
   primaryPhone: string | null;
   primaryEmail: string | null;
   lineId: string | null;
+  age: number | null;
+  annualIncomeTHB: number | null;
+  educationBackground: string | null;
+  customerFactors: Record<string, unknown>;
   status: CustomerStatus;
   leadSource: string | null;
 }
@@ -56,6 +60,7 @@ export interface HouseholdPowerProfile {
   customerId: CustomerId;
   siteId: CustomerSiteId | null;
   monthlyBillTHB: number | null;
+  annualElectricitySpendTHB: number | null;
   monthlyKWh: number | null;
   peakUsageWindow: string | null;
   occupantsCount: number | null;

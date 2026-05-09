@@ -36,7 +36,16 @@ function textOrNull(value: unknown) {
 }
 
 function numberOrNull(value: unknown) {
-  return typeof value === "number" ? value : null;
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
 }
 
 function mapCustomer(row: DbRow): Customer {
@@ -48,6 +57,10 @@ function mapCustomer(row: DbRow): Customer {
     primaryPhone: textOrNull(row.primary_phone),
     primaryEmail: textOrNull(row.primary_email),
     lineId: textOrNull(row.line_id),
+    age: numberOrNull(row.age),
+    annualIncomeTHB: numberOrNull(row.annual_income_thb),
+    educationBackground: textOrNull(row.education_background),
+    customerFactors: (row.customer_factors as Record<string, unknown> | null) ?? {},
     status: String(row.status) as Customer["status"],
     leadSource: textOrNull(row.lead_source),
   };
@@ -112,6 +125,10 @@ export interface CreateCustomerInput {
   primaryEmail?: string | null;
   lineId?: string | null;
   leadSource?: string | null;
+  age?: number | null;
+  annualIncomeTHB?: number | null;
+  educationBackground?: string | null;
+  customerFactors?: Record<string, unknown>;
 }
 
 export interface CreateCustomerSiteInput {
@@ -135,6 +152,26 @@ export interface CreateAutomationEventInput {
   scheduledFor?: string;
 }
 
+export interface CreateHouseholdPowerProfileInput {
+  customerId: CustomerId;
+  siteId?: string | null;
+  ownerUserId: SalesProfileId;
+  orgId?: string | null;
+  monthlyBillTHB?: number | null;
+  annualElectricitySpendTHB?: number | null;
+  notes?: string | null;
+}
+
+export interface CreateHouseholdApplianceInput {
+  powerProfileId: string;
+  customerId: CustomerId;
+  ownerUserId: SalesProfileId;
+  orgId?: string | null;
+  applianceType: string;
+  label: string;
+  inverterLoad?: boolean;
+}
+
 export async function createCustomer(client: DbClient, input: CreateCustomerInput) {
   const { data, error } = await client
     .from(CRM_TABLES.customers)
@@ -146,6 +183,10 @@ export async function createCustomer(client: DbClient, input: CreateCustomerInpu
       primary_email: input.primaryEmail ?? null,
       line_id: input.lineId ?? null,
       lead_source: input.leadSource ?? null,
+      age: input.age ?? null,
+      annual_income_thb: input.annualIncomeTHB ?? null,
+      education_background: input.educationBackground ?? null,
+      customer_factors: input.customerFactors ?? {},
       status: "lead",
     })
     .select("*")
@@ -179,6 +220,59 @@ export async function createCustomerSite(client: DbClient, input: CreateCustomer
   }
 
   return mapCustomerSite(data);
+}
+
+export async function createHouseholdPowerProfile(client: DbClient, input: CreateHouseholdPowerProfileInput) {
+  const { data, error } = await client
+    .from(CRM_TABLES.householdPowerProfiles)
+    .insert({
+      org_id: input.orgId ?? null,
+      customer_id: input.customerId,
+      site_id: input.siteId ?? null,
+      owner_user_id: input.ownerUserId,
+      monthly_bill_thb: input.monthlyBillTHB ?? null,
+      annual_electricity_spend_thb: input.annualElectricitySpendTHB ?? null,
+      notes: input.notes ?? null,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    id: String(data.id),
+    customerId: String(data.customer_id),
+  };
+}
+
+export async function createHouseholdAppliances(client: DbClient, inputs: CreateHouseholdApplianceInput[]) {
+  if (inputs.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await client
+    .from(CRM_TABLES.householdAppliances)
+    .insert(
+      inputs.map((input) => ({
+        org_id: input.orgId ?? null,
+        power_profile_id: input.powerProfileId,
+        customer_id: input.customerId,
+        owner_user_id: input.ownerUserId,
+        appliance_type: input.applianceType,
+        label: input.label,
+        quantity: 1,
+        inverter_load: input.inverterLoad ?? false,
+      })),
+    )
+    .select("id");
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }
 
 export async function listOwnedCustomers(client: DbClient, ownerUserId: SalesProfileId) {

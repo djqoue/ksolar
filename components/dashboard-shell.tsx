@@ -5,6 +5,7 @@ import { startTransition, useEffect, useMemo, useState, type ReactNode } from "r
 import { ChevronLeft, ChevronRight, MapPinned, type LucideIcon, Settings2, Sparkles } from "lucide-react";
 import { LocaleProvider, useAppCopy, useLocaleContext } from "@/components/locale-provider";
 import { Map } from "@/components/Map";
+import { CustomerIntakeCard } from "@/components/customer-intake-card";
 import { FinanceSelector } from "@/components/finance-selector";
 import { QuoteResults } from "@/components/quote-results";
 import { RoofReviewMap } from "@/components/roof-review-map";
@@ -18,6 +19,7 @@ import { calculateQuoteScenario } from "@/lib/calc";
 import { FINANCE_PRODUCTS } from "@/lib/config/finance-products";
 import { DEFAULT_PANEL_ID, findPanel, getPanelAreaM2 } from "@/lib/config/panel-catalog";
 import { CAPACITY_TIERS, DEFAULT_TOPOLOGY, SOLAR_DEFAULTS } from "@/lib/config/solar";
+import { initialCustomerIntake, validateCustomerIntake } from "@/lib/customer-intake";
 import { getLocalizedPresetMeta, LANGUAGE_OPTIONS, type AppLocale } from "@/lib/i18n";
 import { createEmptyMapSelection } from "@/lib/maps";
 import { requestSolarDataLayers, requestSolarInsights } from "@/lib/solar-client";
@@ -75,6 +77,7 @@ function DashboardShellContent() {
   const [selectedInverterId, setSelectedInverterId] = useState<string>("auto");
   const [selectedBatteryId, setSelectedBatteryId] = useState<string>("auto");
   const [selectedTierId, setSelectedTierId] = useState<CapacityTierId | null>(null);
+  const [customerIntake, setCustomerIntake] = useState(initialCustomerIntake);
   const [selectedFinanceIds, setSelectedFinanceIds] = useState(
     FINANCE_PRODUCTS.filter((product) => product.enabledByDefault).map((product) => product.id),
   );
@@ -91,7 +94,9 @@ function DashboardShellContent() {
   const [solarErrorMessage, setSolarErrorMessage] = useState<string | null>(null);
   const crmEnabled = isSupabaseConfigured();
 
-  const step1Done = mapSelection.grossAreaM2 > 0;
+  const customerValidation = useMemo(() => validateCustomerIntake(customerIntake), [customerIntake]);
+  const roofDone = mapSelection.grossAreaM2 > 0;
+  const step1Done = roofDone && customerValidation.ready;
   const step2Done = step1Done;
   const step3Done = step1Done;
   const maxUnlockedStep: StepNumber = step1Done ? 3 : 1;
@@ -266,6 +271,10 @@ function DashboardShellContent() {
   ].join(" · ");
 
   const roofSummaryItems = [
+    {
+      label: "客户资料",
+      value: customerValidation.ready ? "Ready" : "Missing",
+    },
     {
       label: copy.solar.roofSelectionCount,
       value: mapSelection.shapes.length > 0 ? formatNumber(mapSelection.shapes.length) : "0",
@@ -443,11 +452,15 @@ function DashboardShellContent() {
               tone={steps[0].tone}
               title={copy.workflow.step1Title}
               description={copy.workflow.step1Description}
-              signal={step1Done ? `${formatNumber(mapSelection.grossAreaM2, 1)} m²` : "SATELLITE"}
+              signal={step1Done ? `${formatNumber(mapSelection.grossAreaM2, 1)} m²` : "CUSTOMER + ROOF"}
               footer={
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm font-medium text-slate-700">
-                    {step1Done ? `${copy.map.grossArea}: ${formatNumber(mapSelection.grossAreaM2, 1)} m²` : copy.map.step1Body}
+                    {step1Done
+                      ? `${copy.map.grossArea}: ${formatNumber(mapSelection.grossAreaM2, 1)} m²`
+                      : !customerValidation.ready
+                        ? customerValidation.message ?? `先补齐客户必填信息：${customerValidation.missing.join("、")}`
+                        : copy.map.step1Body}
                   </p>
                   <Button disabled={!step1Done} size="lg" className="min-w-[180px]" onClick={() => setActiveStep(2)}>
                     {copy.workflow.continue}
@@ -457,6 +470,7 @@ function DashboardShellContent() {
               }
             >
               <div className="grid gap-4">
+                <CustomerIntakeCard value={customerIntake} onChange={setCustomerIntake} />
                 <Map
                   value={mapSelection}
                   onChange={handleMapSelectionChange}
@@ -465,7 +479,7 @@ function DashboardShellContent() {
                   solarSelectionMatch={solarSelectionMatch}
                 />
                 <div className="grid gap-3 sm:grid-cols-3">
-                  {roofSummaryItems.slice(1, 4).map((item) => (
+                  {roofSummaryItems.slice(0, 3).map((item) => (
                     <SimpleMetric key={item.label} label={item.label} value={item.value} />
                   ))}
                 </div>
