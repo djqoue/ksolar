@@ -4,15 +4,16 @@ import { revalidatePath } from "next/cache";
 import {
   buildCustomerFactorPayload,
   getCustomerIntakeCopy,
+  getSelectedApplianceDetails,
   initialCustomerIntakeSaveState,
-  LARGE_APPLIANCE_OPTIONS,
   normalizeCustomerPhone,
   parseCustomerIntakeFormData,
   parseOptionalNumber,
   validateCustomerIntake,
+  type CustomerIntake,
   type CustomerIntakeSaveState,
 } from "@/lib/customer-intake";
-import { resolveAppLocale } from "@/lib/i18n";
+import { resolveAppLocale, type AppLocale } from "@/lib/i18n";
 import {
   createAutomationEvent,
   createCustomer,
@@ -27,8 +28,20 @@ export async function saveCustomerIntake(
   formData: FormData,
 ): Promise<CustomerIntakeSaveState> {
   const locale = resolveAppLocale(formData.get("locale")?.toString());
-  const copy = getCustomerIntakeCopy(locale);
   const value = parseCustomerIntakeFormData(formData);
+
+  return persistCustomerIntake(value, locale);
+}
+
+export async function saveCustomerIntakeValue(
+  value: CustomerIntake,
+  locale: AppLocale,
+): Promise<CustomerIntakeSaveState> {
+  return persistCustomerIntake(value, locale);
+}
+
+async function persistCustomerIntake(value: CustomerIntake, locale: AppLocale): Promise<CustomerIntakeSaveState> {
+  const copy = getCustomerIntakeCopy(locale);
   const validation = validateCustomerIntake(value, locale);
 
   if (!validation.ready) {
@@ -106,17 +119,20 @@ export async function saveCustomerIntake(
       notes: value.notes.trim() || null,
     });
 
-    const selectedAppliances = LARGE_APPLIANCE_OPTIONS.filter((option) => value.largeAppliances.includes(option.id));
+    const selectedAppliances = getSelectedApplianceDetails(value);
 
     await createHouseholdAppliances(
       supabase,
-      selectedAppliances.map((option) => ({
+      selectedAppliances.map(({ option, quantity }) => ({
         powerProfileId: powerProfile.id,
         customerId: customer.id,
         ownerUserId: user.id,
         orgId,
         applianceType: option.type,
         label: option.crmLabel,
+        quantity,
+        ratedPowerW: option.ratedPowerW,
+        estimatedHoursPerDay: option.estimatedHoursPerDay,
         inverterLoad: option.inverterLoad,
       })),
     );

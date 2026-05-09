@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Circle as GoogleMapCircle, GoogleMap, GroundOverlay, Polygon as GoogleMapPolygon, useJsApiLoader } from "@react-google-maps/api";
 import { CheckCircle2, Grid2X2, Layers3, MapPinned, PenSquare, SunMedium, TriangleAlert } from "lucide-react";
 import { useAppCopy, useLocaleContext } from "@/components/locale-provider";
@@ -20,6 +20,7 @@ interface RoofReviewMapProps {
   solarDataLayers?: GoogleSolarDataLayerPaths | null;
   selectionMatch?: SolarSelectionMatchSummary | null;
   fallbackCenter?: SolarLatLng | null;
+  variant?: "card" | "immersive";
   onEditRoof: () => void;
 }
 
@@ -46,6 +47,7 @@ export function RoofReviewMap({
   solarDataLayers,
   selectionMatch,
   fallbackCenter,
+  variant = "card",
   onEditRoof,
 }: RoofReviewMapProps) {
   const copy = useAppCopy();
@@ -53,6 +55,7 @@ export function RoofReviewMap({
   const googleMapsApiKey =
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || RUNTIME_FALLBACKS.googleMapsApiKey;
   const mapRef = useRef<google.maps.Map | null>(null);
+  const isImmersive = variant === "immersive";
   const hasGeoSelection = selectionHasGeoShapes(selection);
   const [dataLayerAnalysis, setDataLayerAnalysis] = useState<SolarDataLayerAnalysis | null>(null);
   const [isAnalyzingLayers, setIsAnalyzingLayers] = useState(false);
@@ -250,6 +253,237 @@ export function RoofReviewMap({
     mapRef.current.setCenter(initialCenter);
     mapRef.current.setZoom(19);
   }, [initialCenter, selection.shapes, solarInsights]);
+
+  const refreshMapSize = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || typeof google === "undefined") {
+      return;
+    }
+
+    google.maps.event.trigger(map, "resize");
+    map.setCenter(initialCenter);
+  }, [initialCenter]);
+
+  useEffect(() => {
+    if (!isImmersive || !isLoaded) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      refreshMapSize();
+      window.setTimeout(refreshMapSize, 180);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isImmersive, isLoaded, refreshMapSize]);
+
+  const immersiveMapContainerStyle = isImmersive
+    ? {
+        position: "absolute" as const,
+        inset: 0,
+        width: "100%",
+        height: "calc(100vh - 64px)",
+        minHeight: "680px",
+      }
+    : undefined;
+
+  if (isImmersive) {
+    return (
+      <div className="map-stage relative h-[calc(100vh-64px)] min-h-[680px] overflow-hidden bg-slate-950 sm:min-h-[720px]">
+        <div className="pointer-events-auto absolute left-2 top-2 z-20 w-[min(92vw,360px)] rounded-[1.15rem] border border-white/25 bg-slate-950/82 p-2 text-white shadow-[0_22px_70px_rgba(15,23,42,0.35)] backdrop-blur-2xl sm:left-4 sm:top-4">
+          <div className="mb-2 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">
+            <Layers3 className="size-3.5" />
+            {layerLabels.title}
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+            <LayerToggle
+              active={visibleLayers.annualFlux}
+              disabled={!dataLayerAnalysis?.annualFluxOverlay}
+              label={layerLabels.annualFlux}
+              icon={<SunMedium className="size-3.5" />}
+              onClick={() => setVisibleLayers((current) => ({ ...current, annualFlux: !current.annualFlux }))}
+            />
+            <LayerToggle
+              active={visibleLayers.panelArray}
+              disabled={!solarInsights?.solarPanels.length}
+              label={layerLabels.panelArray}
+              icon={<Grid2X2 className="size-3.5" />}
+              onClick={() => setVisibleLayers((current) => ({ ...current, panelArray: !current.panelArray }))}
+            />
+            <LayerToggle
+              active={visibleLayers.selectedRoof}
+              disabled={!selection.shapes.some((shape) => shape.path.length > 0)}
+              label={layerLabels.selectedRoof}
+              icon={<MapPinned className="size-3.5" />}
+              onClick={() => setVisibleLayers((current) => ({ ...current, selectedRoof: !current.selectedRoof }))}
+            />
+            <LayerToggle
+              active={visibleLayers.googleBoundary}
+              disabled={!solarInsights?.boundingBox}
+              label={layerLabels.googleBoundary}
+              onClick={() => setVisibleLayers((current) => ({ ...current, googleBoundary: !current.googleBoundary }))}
+            />
+            <LayerToggle
+              active={visibleLayers.roofSegments}
+              disabled={!solarInsights?.roofSegments.length}
+              label={layerLabels.roofSegments}
+              onClick={() => setVisibleLayers((current) => ({ ...current, roofSegments: !current.roofSegments }))}
+            />
+          </div>
+        </div>
+
+        {isLoaded ? (
+          <GoogleMap
+            mapContainerClassName="absolute inset-0 h-[calc(100vh-64px)] min-h-[680px] w-full sm:min-h-[720px]"
+            mapContainerStyle={immersiveMapContainerStyle}
+            center={initialCenter}
+            zoom={19}
+            onLoad={(map) => {
+              mapRef.current = map;
+              map.setMapTypeId("satellite");
+              window.setTimeout(refreshMapSize, 0);
+            }}
+            options={{
+              draggable: true,
+              fullscreenControl: false,
+              streetViewControl: false,
+              mapTypeControl: false,
+              clickableIcons: false,
+              keyboardShortcuts: false,
+              gestureHandling: "greedy",
+            }}
+          >
+            {visibleLayers.annualFlux && dataLayerAnalysis?.annualFluxOverlay ? (
+              <GroundOverlay
+                key={dataLayerAnalysis.annualFluxOverlay.dataUrl}
+                url={dataLayerAnalysis.annualFluxOverlay.dataUrl}
+                bounds={{
+                  north: dataLayerAnalysis.annualFluxOverlay.bounds.north,
+                  south: dataLayerAnalysis.annualFluxOverlay.bounds.south,
+                  east: dataLayerAnalysis.annualFluxOverlay.bounds.east,
+                  west: dataLayerAnalysis.annualFluxOverlay.bounds.west,
+                }}
+                options={{
+                  clickable: false,
+                  opacity: 0.72,
+                }}
+              />
+            ) : null}
+
+            {visibleLayers.selectedRoof
+              ? selection.shapes
+                  .filter((shape) => shape.path.length > 0)
+                  .map((shape) => (
+                    <GoogleMapPolygon
+                      key={shape.id}
+                      path={shape.path}
+                      options={{
+                        clickable: false,
+                        editable: false,
+                        fillColor: "#f97316",
+                        fillOpacity: 0.18,
+                        strokeColor: "#f97316",
+                        strokeOpacity: 0.95,
+                        strokeWeight: 2,
+                        zIndex: 4,
+                      }}
+                    />
+                  ))
+              : null}
+
+            {visibleLayers.googleBoundary && solarInsights?.boundingBox ? (
+              <GoogleMapPolygon
+                path={boundsToPath(solarInsights.boundingBox)}
+                options={{
+                  clickable: false,
+                  fillOpacity: 0,
+                  strokeColor: selectionMatch?.status === "inside-selection" ? "#14b8a6" : "#f59e0b",
+                  strokeOpacity: 0.9,
+                  strokeWeight: 2,
+                  zIndex: 2,
+                }}
+              />
+            ) : null}
+
+            {visibleLayers.roofSegments
+              ? solarInsights?.roofSegments.map((segment) =>
+                  segment.center ? (
+                    <GoogleMapCircle
+                      key={`review-segment-${segment.segmentIndex}`}
+                      center={{ lat: segment.center.latitude, lng: segment.center.longitude }}
+                      radius={1.5}
+                      options={{
+                        clickable: false,
+                        fillColor: "#111827",
+                        fillOpacity: 0.8,
+                        strokeOpacity: 0,
+                        zIndex: 3,
+                      }}
+                    />
+                  ) : null,
+                )
+              : null}
+
+            {visibleLayers.panelArray ? (
+              <>
+                {panelOverlay.outside.map((panel) => (
+                  <GoogleMapPolygon
+                    key={`review-panel-outside-${panel.id}`}
+                    path={panel.path}
+                    options={{
+                      clickable: false,
+                      fillColor: "#f59e0b",
+                      fillOpacity: 0.2,
+                      strokeColor: "#f59e0b",
+                      strokeOpacity: 0.45,
+                      strokeWeight: 1,
+                      zIndex: 4,
+                    }}
+                  />
+                ))}
+
+                {panelOverlay.inside.map((panel) => (
+                  <GoogleMapPolygon
+                    key={`review-panel-inside-${panel.id}`}
+                    path={panel.path}
+                    options={{
+                      clickable: false,
+                      fillColor: "#14b8a6",
+                      fillOpacity: 0.72,
+                      strokeColor: "#f8fafc",
+                      strokeOpacity: 0.72,
+                      strokeWeight: 1,
+                      zIndex: 5,
+                    }}
+                  />
+                ))}
+              </>
+            ) : null}
+
+            {solarInsights?.center ? (
+              <GoogleMapCircle
+                center={{ lat: solarInsights.center.latitude, lng: solarInsights.center.longitude }}
+                radius={2.5}
+                options={{
+                  clickable: false,
+                  fillColor: selectionMatch?.status === "inside-selection" ? "#111827" : "#f59e0b",
+                  fillOpacity: 0.9,
+                  strokeColor: "#ffffff",
+                  strokeOpacity: 0.9,
+                  strokeWeight: 2,
+                  zIndex: 6,
+                }}
+              />
+            ) : null}
+          </GoogleMap>
+        ) : (
+          <div className="flex h-full items-center justify-center bg-slate-950 text-sm text-white/70">
+            {copy.map.loadingMaps}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <Card className="overflow-hidden">

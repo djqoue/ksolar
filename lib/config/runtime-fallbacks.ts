@@ -1,8 +1,8 @@
-// Temporary deployment fallbacks for environments where Vercel env vars
-// were not configured correctly yet. Environment variables still take priority.
-// Move these keys back into platform-managed secrets after the deployment is stable.
+// Runtime fallbacks intentionally do not contain real keys.
+// Keep API keys in `.env.local` and Vercel Environment Variables only, so the
+// app never silently falls back to a shared demo key and burns its daily quota.
 
 export const RUNTIME_FALLBACKS = {
-  googleMapsApiKey: "AIzaSyC7_qNO84rs7H3kYmQTR70AvUBQAPpXDo8",
-  googleSolarApiKey: "AIzaSyBB_qZ6ZcGSyztbrDG0wh_JWSSSKUgjVM8",
+  googleMapsApiKey: "",
+  googleSolarApiKey: "",
 } as const;

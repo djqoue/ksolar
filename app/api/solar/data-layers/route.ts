@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RUNTIME_FALLBACKS } from "@/lib/config/runtime-fallbacks";
+import { buildGoogleApiErrorPayload } from "@/lib/google-api-errors";
 import { extractGeoTiffId, formatGoogleDate } from "@/lib/solar";
 import type { GoogleSolarDataLayerPaths } from "@/types/solar";
 
@@ -115,11 +116,15 @@ export async function GET(request: NextRequest) {
   }
 
   if (!response.ok) {
+    const apiError = buildGoogleApiErrorPayload({
+      fallbackMessage: "Google Solar dataLayers request failed.",
+      httpStatus: response.status,
+      providerStatus: payload.error?.status || response.statusText,
+      message: payload.error?.message,
+    });
+
     return NextResponse.json(
-      {
-        error: payload.error?.message || "Google Solar dataLayers request failed.",
-        status: payload.error?.status || response.statusText,
-      },
+      apiError,
       { status: response.status },
     );
   }

@@ -4,41 +4,50 @@ import { resolveAppLocale } from "@/lib/i18n";
 
 const GOOGLE_GEOCODING_ENDPOINT = "https://maps.googleapis.com/maps/api/geocode/json";
 
+interface GoogleGeocodePayload {
+  status?: string;
+  results?: Array<{
+    formatted_address?: string;
+    geometry?: {
+      location?: {
+        lat?: number;
+        lng?: number;
+      };
+    };
+  }>;
+  error_message?: string;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const latitude = Number(searchParams.get("lat"));
-  const longitude = Number(searchParams.get("lng"));
+  const address = searchParams.get("address")?.trim();
   const locale = resolveAppLocale(searchParams.get("locale"));
 
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return NextResponse.json({ formattedAddress: null, error: "Invalid coordinates." }, { status: 400 });
+  if (!address) {
+    return NextResponse.json({ result: null, error: "Address is required." }, { status: 400 });
   }
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   if (!apiKey) {
-    return NextResponse.json({ formattedAddress: null, error: "Google Maps key is not configured." });
+    return NextResponse.json({ result: null, error: "Google Maps key is not configured." });
   }
 
   const url = new URL(GOOGLE_GEOCODING_ENDPOINT);
-  url.searchParams.set("latlng", `${latitude},${longitude}`);
+  url.searchParams.set("address", address);
   url.searchParams.set("key", apiKey);
   url.searchParams.set("language", getGoogleLanguage(locale));
   url.searchParams.set("region", "th");
 
   try {
     const response = await fetch(url, { cache: "no-store" });
-    const payload = (await response.json()) as {
-      status?: string;
-      results?: Array<{ formatted_address?: string }>;
-      error_message?: string;
-    };
+    const payload = (await response.json()) as GoogleGeocodePayload;
 
     if (!response.ok || (payload.status && !["OK", "ZERO_RESULTS"].includes(payload.status))) {
       return NextResponse.json({
-        formattedAddress: null,
+        result: null,
         ...buildGoogleApiErrorPayload({
-          fallbackMessage: "Google reverse geocoding failed.",
+          fallbackMessage: "Google geocoding failed.",
           httpStatus: response.status,
           providerStatus: payload.status || response.statusText,
           message: payload.error_message,
@@ -46,13 +55,26 @@ export async function GET(request: Request) {
       });
     }
 
+    const firstResult = payload.results?.find((item) => {
+      const location = item.geometry?.location;
+      return Number.isFinite(location?.lat) && Number.isFinite(location?.lng);
+    });
+
+    if (!firstResult?.geometry?.location) {
+      return NextResponse.json({ result: null });
+    }
+
     return NextResponse.json({
-      formattedAddress: payload.results?.find((item) => item.formatted_address)?.formatted_address ?? null,
+      result: {
+        formattedAddress: firstResult.formatted_address || address,
+        latitude: firstResult.geometry.location.lat,
+        longitude: firstResult.geometry.location.lng,
+      },
     });
   } catch (error) {
     return NextResponse.json({
-      formattedAddress: null,
-      error: error instanceof Error ? error.message : "Reverse geocoding failed.",
+      result: null,
+      error: error instanceof Error ? error.message : "Geocoding failed.",
     });
   }
 }

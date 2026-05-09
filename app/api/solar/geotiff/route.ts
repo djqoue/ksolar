@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RUNTIME_FALLBACKS } from "@/lib/config/runtime-fallbacks";
+import { buildGoogleApiErrorPayload } from "@/lib/google-api-errors";
 
 export async function GET(request: NextRequest) {
   const apiKey = process.env.GOOGLE_SOLAR_API_KEY || RUNTIME_FALLBACKS.googleSolarApiKey;
@@ -31,8 +32,26 @@ export async function GET(request: NextRequest) {
   });
 
   if (!response.ok) {
+    let message: string | undefined;
+    let providerStatus: string | number | null = response.statusText;
+
+    try {
+      const payload = (await response.clone().json()) as {
+        error?: { message?: string; status?: string };
+      };
+      message = payload.error?.message;
+      providerStatus = payload.error?.status || response.statusText;
+    } catch {
+      message = undefined;
+    }
+
     return NextResponse.json(
-      { error: "Failed to fetch GeoTIFF from Google Solar." },
+      buildGoogleApiErrorPayload({
+        fallbackMessage: "Failed to fetch GeoTIFF from Google Solar.",
+        httpStatus: response.status,
+        providerStatus,
+        message,
+      }),
       { status: response.status },
     );
   }

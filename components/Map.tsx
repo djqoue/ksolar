@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Circle as GoogleMapCircle,
   DrawingManager,
@@ -33,6 +33,20 @@ interface MapProps {
   onCenterChange?: (value: { latitude: number; longitude: number }) => void;
   solarInsights?: GoogleSolarSummary | null;
   solarSelectionMatch?: SolarSelectionMatchSummary | null;
+  focusPoint?: { latitude: number; longitude: number } | null;
+  focusAddress?: string;
+  focusRequestId?: number;
+  immersive?: boolean;
+}
+
+interface GeocodeApiResponse {
+  result?: {
+    formattedAddress: string;
+    latitude: number;
+    longitude: number;
+  } | null;
+  error?: string;
+  code?: string;
 }
 
 function boundsToPath(bounds?: GoogleSolarSummary["boundingBox"]) {
@@ -109,7 +123,17 @@ function buildSelection(overlays: OverlayRecord[]): MapSelectionSummary {
   };
 }
 
-export function Map({ value, onChange, onCenterChange, solarInsights, solarSelectionMatch }: MapProps) {
+export function Map({
+  value,
+  onChange,
+  onCenterChange,
+  solarInsights,
+  solarSelectionMatch,
+  focusPoint,
+  focusAddress,
+  focusRequestId = 0,
+  immersive = false,
+}: MapProps) {
   const copy = useAppCopy();
   const { locale } = useLocaleContext();
   const toolLabels =
@@ -122,7 +146,6 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || RUNTIME_FALLBACKS.googleMapsApiKey;
   const overlaysRef = useRef<OverlayRecord[]>([]);
   const mapRef = useRef<google.maps.Map | null>(null);
-  const geocoderRef = useRef<google.maps.Geocoder | null>(null);
   const drawingManagerRef = useRef<google.maps.drawing.DrawingManager | null>(null);
   const [manualArea, setManualArea] = useState(value.grossAreaM2 ? String(value.grossAreaM2) : "");
   const [searchValue, setSearchValue] = useState("");
@@ -132,6 +155,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
   const [mapCenter, setMapCenter] = useState(DEFAULT_MAP_CENTER);
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [drawMode, setDrawMode] = useState<ShapeKind | null>(null);
+  const [isFlyoverActive, setIsFlyoverActive] = useState(false);
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey,
@@ -150,14 +174,6 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
 
     return () => window.clearTimeout(timeout);
   }, [isLoaded, loadError]);
-
-  useEffect(() => {
-    if (!isLoaded || geocoderRef.current || typeof google === "undefined") {
-      return;
-    }
-
-    geocoderRef.current = new google.maps.Geocoder();
-  }, [isLoaded]);
 
   useEffect(() => {
     if (!drawingManagerRef.current || typeof google === "undefined") {
@@ -182,7 +198,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
     onChange(buildSelection(overlaysRef.current));
   };
 
-  const applyMapCenter = (
+  const applyMapCenter = useCallback((
     nextCenter: { lat: number; lng: number },
     statusMessage: string,
     zoom = 20,
@@ -196,7 +212,60 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
     }
 
     setLocationStatus(statusMessage);
-  };
+  }, [onCenterChange]);
+
+  const flyToMapCenter = useCallback((nextCenter: { lat: number; lng: number }, statusMessage: string) => {
+    setMapCenter(nextCenter);
+    onCenterChange?.({ latitude: nextCenter.lat, longitude: nextCenter.lng });
+    setLocationStatus(statusMessage);
+
+    if (!mapRef.current) {
+      return;
+    }
+
+    setIsFlyoverActive(true);
+    mapRef.current.setZoom(6);
+    mapRef.current.panTo(nextCenter);
+
+    window.setTimeout(() => {
+      mapRef.current?.setZoom(13);
+    }, 240);
+    window.setTimeout(() => {
+      mapRef.current?.panTo(nextCenter);
+      mapRef.current?.setZoom(19);
+    }, 760);
+    window.setTimeout(() => {
+      setIsFlyoverActive(false);
+    }, 1450);
+  }, [onCenterChange]);
+
+  const refreshMapSize = useCallback(() => {
+    if (!mapRef.current || typeof google === "undefined") {
+      return;
+    }
+
+    const currentCenter = mapRef.current.getCenter();
+    google.maps.event.trigger(mapRef.current, "resize");
+    if (currentCenter) {
+      mapRef.current.setCenter(currentCenter);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!immersive || !isLoaded) {
+      return;
+    }
+
+    const animationFrame = window.requestAnimationFrame(refreshMapSize);
+    const shortDelay = window.setTimeout(refreshMapSize, 180);
+    const longDelay = window.setTimeout(refreshMapSize, 720);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.clearTimeout(shortDelay);
+      window.clearTimeout(longDelay);
+    };
+  }, [immersive, isLoaded, refreshMapSize]);
 
   const attachOverlayListeners = (overlayRecord: OverlayRecord) => {
     if (overlayRecord.kind === "polygon") {
@@ -249,39 +318,72 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
     syncShapes();
   };
 
-  const geocodeSearchValue = async (query: string) => {
-    const geocoder = geocoderRef.current;
-    if (!geocoder) {
-      setLocationStatus(copy.map.statusGeocoderNotReady);
-      return;
-    }
-
+  const geocodeSearchValue = useCallback(async (query: string, flyover = false) => {
     setIsSearching(true);
     setLocationStatus(copy.map.statusSearching(query));
 
     try {
-      const response = await geocoder.geocode({ address: query });
-      const firstResult = response.results[0];
-      const location = firstResult?.geometry?.location;
+      const params = new URLSearchParams({
+        address: query,
+        locale,
+      });
+      const response = await fetch(`/api/maps/geocode?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const payload = (await response.json()) as GeocodeApiResponse;
+      const firstResult = payload.result;
 
-      if (!location) {
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error || payload.code || "Geocoding failed.");
+      }
+
+      if (!firstResult) {
         setLocationStatus(copy.map.statusNoResult);
         return;
       }
 
       const nextCenter = {
-        lat: location.lat(),
-        lng: location.lng(),
+        lat: firstResult.latitude,
+        lng: firstResult.longitude,
       };
 
-      setSearchValue(firstResult.formatted_address || query);
-      applyMapCenter(nextCenter, copy.map.statusCentered(firstResult.formatted_address || query));
+      setSearchValue(firstResult.formattedAddress || query);
+      if (flyover) {
+        flyToMapCenter(nextCenter, copy.map.statusCentered(firstResult.formattedAddress || query));
+      } else {
+        applyMapCenter(nextCenter, copy.map.statusCentered(firstResult.formattedAddress || query));
+      }
     } catch {
       setLocationStatus(copy.map.statusSearchFailed);
     } finally {
       setIsSearching(false);
     }
-  };
+  }, [
+    applyMapCenter,
+    copy.map,
+    flyToMapCenter,
+    locale,
+  ]);
+
+  useEffect(() => {
+    if (!isLoaded || !focusRequestId) {
+      return;
+    }
+
+    if (focusPoint) {
+      flyToMapCenter(
+        { lat: focusPoint.latitude, lng: focusPoint.longitude },
+        copy.map.statusCurrentLocation,
+      );
+      return;
+    }
+
+    const trimmedAddress = focusAddress?.trim();
+    if (trimmedAddress) {
+      setSearchValue(trimmedAddress);
+      void geocodeSearchValue(trimmedAddress, true);
+    }
+  }, [copy.map.statusCurrentLocation, flyToMapCenter, focusAddress, focusPoint, focusRequestId, geocodeSearchValue, isLoaded]);
 
   const handleSearchClick = () => {
     const trimmedSearch = searchValue.trim();
@@ -376,12 +478,29 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
   };
 
   if (!googleMapsApiKey || loadError) {
+    const mapUnavailableTitle =
+      loadError
+        ? locale === "zh"
+          ? "Google 地图暂时不可用"
+          : locale === "th"
+            ? "Google Maps ใช้งานไม่ได้ชั่วคราว"
+            : "Google Maps is temporarily unavailable"
+        : copy.map.demoModeTitle;
+    const mapUnavailableDescription =
+      loadError
+        ? locale === "zh"
+          ? "可能是 Maps API 配额、billing、referrer 限制或 key 权限问题。你仍可先手动输入屋顶面积继续报价。"
+          : locale === "th"
+            ? "อาจเกิดจากโควตา Maps API, billing, referrer restriction หรือสิทธิ์ของ key ยังไม่ถูกต้อง ยังสามารถกรอกพื้นที่หลังคาเองเพื่อเสนอราคาได้"
+            : "This may be Maps API quota, billing, referrer, or key permission related. You can still enter roof area manually and continue the quote."
+        : copy.map.demoModeDescription;
+
     return (
-      <Card className="h-full border-dashed">
+      <Card className={immersive ? "map-stage rounded-none border-dashed" : "h-full border-dashed"}>
         <CardHeader>
-          <CardTitle>{copy.map.demoModeTitle}</CardTitle>
+          <CardTitle>{mapUnavailableTitle}</CardTitle>
           <CardDescription>
-            {copy.map.demoModeDescription}
+            {mapUnavailableDescription}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex min-h-[420px] flex-col gap-4 sm:h-[560px]">
@@ -437,14 +556,54 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
     );
   }
 
+  const toolButtonClass = immersive
+    ? "min-h-12 shrink-0 px-3 text-xs leading-tight sm:min-h-11 sm:text-sm"
+    : "min-h-11 flex-1 text-xs leading-tight sm:min-h-0 sm:flex-none sm:text-sm";
+  const compactToolButtonClass = immersive
+    ? "min-h-12 shrink-0 px-3 text-xs leading-tight sm:min-h-11 sm:text-sm"
+    : "w-full sm:w-auto";
+  const immersiveMapContainerStyle = immersive
+    ? {
+        position: "absolute" as const,
+        inset: 0,
+        width: "100%",
+        height: "calc(100vh - 64px)",
+        minHeight: "680px",
+      }
+    : undefined;
+
   return (
-    <Card className="h-full overflow-hidden">
-      <CardContent className="flex flex-col gap-3 p-2 sm:p-4 md:h-[calc(100vh-250px)] md:min-h-[620px] xl:min-h-[720px]">
-        <div className="order-1 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+    <Card
+      className={
+        immersive
+          ? "map-stage relative h-[calc(100vh-64px)] min-h-[680px] overflow-hidden rounded-none border-0 bg-slate-950 shadow-none sm:min-h-[720px]"
+          : "h-full overflow-hidden"
+      }
+    >
+      <CardContent
+        className={
+          immersive
+            ? "relative h-full p-0"
+            : "flex flex-col gap-3 p-2 sm:p-4 md:h-[calc(100vh-250px)] md:min-h-[620px] xl:min-h-[720px]"
+        }
+      >
+        <div
+          className={
+            immersive
+              ? "absolute inset-x-2 top-2 z-30 grid gap-2 rounded-[1.2rem] border border-white/25 bg-white/90 p-2 shadow-[0_22px_70px_rgba(15,23,42,0.24)] backdrop-blur-2xl sm:inset-x-4 sm:top-4 lg:grid-cols-[minmax(0,1fr)_auto]"
+              : "order-1 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto_auto]"
+          }
+        >
           <div className="grid gap-2">
-            <div className="grid grid-cols-2 gap-2 xl:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto_auto]">
+            <div
+              className={
+                immersive
+                  ? "grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]"
+                  : "grid grid-cols-2 gap-2 xl:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto_auto]"
+              }
+            >
               <Input
-                className="col-span-2 xl:col-span-1"
+                className={immersive ? "col-span-2 h-11 rounded-xl bg-white/95 text-sm sm:col-span-1" : "col-span-2 xl:col-span-1"}
                 placeholder={copy.map.searchPlaceholder}
                 value={searchValue}
                 onChange={(event) => setSearchValue(event.target.value)}
@@ -455,24 +614,41 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
                   }
                 }}
               />
-              <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleSearchClick} disabled={isSearching}>
+              <Button
+                variant="outline"
+                size="sm"
+                className={immersive ? "min-h-11 px-3 text-xs sm:w-auto sm:text-sm" : "w-full sm:w-auto"}
+                onClick={handleSearchClick}
+                disabled={isSearching}
+              >
                 <Search data-icon="inline-start" />
                 {isSearching ? copy.map.finding : copy.map.find}
               </Button>
-              <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleUseMyLocation} disabled={isLocating}>
+              <Button
+                variant="outline"
+                size="sm"
+                className={immersive ? "min-h-11 px-3 text-xs sm:w-auto sm:text-sm" : "w-full sm:w-auto"}
+                onClick={handleUseMyLocation}
+                disabled={isLocating}
+              >
                 <LocateFixed data-icon="inline-start" />
                 {isLocating ? copy.map.locating : copy.map.useMyLocation}
               </Button>
-              <Button variant="ghost" size="sm" className="hidden w-full sm:inline-flex sm:w-auto" onClick={handleUseCurrentMapCenter}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={immersive ? "hidden min-h-11 px-3 text-xs sm:inline-flex sm:w-auto sm:text-sm" : "hidden w-full sm:inline-flex sm:w-auto"}
+                onClick={handleUseCurrentMapCenter}
+              >
                 <MapPin data-icon="inline-start" />
                 {copy.map.useMapCenter}
               </Button>
             </div>
             {locationStatus ? (
-              <p className="text-sm text-muted-foreground">{locationStatus}</p>
+              <p className={immersive ? "line-clamp-2 text-xs leading-5 text-slate-600 sm:text-sm" : "text-sm text-muted-foreground"}>{locationStatus}</p>
             ) : null}
           </div>
-          <div className="hidden grid-cols-2 gap-3 sm:grid xl:contents">
+          <div className={immersive ? "hidden gap-2 lg:flex" : "hidden grid-cols-2 gap-3 sm:grid xl:contents"}>
             <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-2.5 text-sm">
               <div className="metric-label">{copy.map.grossArea}</div>
               <div className="metric-value mt-1">{formatNumber(summary.grossAreaM2, 1)} m²</div>
@@ -483,12 +659,18 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             </div>
           </div>
         </div>
-        <div className="order-2 rounded-xl border border-border/70 bg-muted/20 p-2.5 sm:p-3">
-          <div className="flex flex-wrap gap-2">
+        <div
+          className={
+            immersive
+              ? "absolute inset-x-2 bottom-[calc(env(safe-area-inset-bottom)+10rem)] z-30 rounded-[1.15rem] border border-white/25 bg-white/92 p-2 shadow-[0_18px_60px_rgba(15,23,42,0.24)] backdrop-blur-2xl sm:bottom-[calc(env(safe-area-inset-bottom)+7rem)] sm:left-4 sm:right-auto sm:max-w-[calc(100%-2rem)]"
+              : "order-2 rounded-xl border border-border/70 bg-muted/20 p-2.5 sm:p-3"
+          }
+        >
+          <div className={immersive ? "flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]" : "flex flex-wrap gap-2"}>
             <Button
               variant={drawMode === "rectangle" ? "default" : "outline"}
               size="sm"
-              className="min-h-11 flex-1 text-xs leading-tight sm:min-h-0 sm:flex-none sm:text-sm"
+              className={toolButtonClass}
               onClick={() => {
                 setDrawMode("rectangle");
                 setLocationStatus(copy.map.step2Body);
@@ -500,7 +682,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             <Button
               variant={drawMode === "polygon" ? "default" : "outline"}
               size="sm"
-              className="min-h-11 flex-1 text-xs leading-tight sm:min-h-0 sm:flex-none sm:text-sm"
+              className={toolButtonClass}
               onClick={() => {
                 setDrawMode("polygon");
                 setLocationStatus(copy.map.advancedModeHint);
@@ -512,21 +694,21 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             <Button
               variant={drawMode === null ? "secondary" : "ghost"}
               size="sm"
-              className="min-h-11 flex-1 text-xs leading-tight sm:min-h-0 sm:flex-none sm:text-sm"
+              className={toolButtonClass}
               onClick={() => setDrawMode(null)}
             >
               {toolLabels.pan}
             </Button>
             {drawMode ? (
-              <Button variant="ghost" size="sm" className="w-full sm:w-auto" onClick={() => setDrawMode(null)}>
+              <Button variant="ghost" size="sm" className={compactToolButtonClass} onClick={() => setDrawMode(null)}>
                 {copy.map.doneDrawing}
               </Button>
             ) : null}
-            <Button variant="outline" size="sm" className="min-h-11 flex-1 text-xs leading-tight sm:min-h-0 sm:flex-none sm:text-sm" onClick={removeLast} disabled={summary.shapes.length === 0}>
+            <Button variant="outline" size="sm" className={toolButtonClass} onClick={removeLast} disabled={summary.shapes.length === 0}>
               <Undo2 data-icon="inline-start" />
               {toolLabels.undo}
             </Button>
-            <Button variant="ghost" size="sm" className="min-h-11 flex-1 text-xs leading-tight sm:min-h-0 sm:flex-none sm:text-sm" onClick={clearAll} disabled={summary.shapes.length === 0}>
+            <Button variant="ghost" size="sm" className={toolButtonClass} onClick={clearAll} disabled={summary.shapes.length === 0}>
               <Trash2 data-icon="inline-start" />
               {toolLabels.clear}
             </Button>
@@ -537,8 +719,14 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             </p>
           ) : null}
         </div>
-        <div className="relative order-3 h-[52vh] min-h-[360px] max-h-[560px] flex-none overflow-hidden rounded-[1.15rem] border border-border/70 sm:h-[58vh] sm:min-h-[520px] md:h-auto md:min-h-0 md:flex-1">
-          <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-center gap-2 sm:inset-x-4 sm:top-4">
+        <div
+          className={
+            immersive
+              ? "map-stage absolute inset-0 z-0 h-[calc(100vh-64px)] min-h-[680px] overflow-hidden bg-slate-950 sm:min-h-[720px]"
+              : "relative order-3 h-[52vh] min-h-[360px] max-h-[560px] flex-none overflow-hidden rounded-[1.15rem] border border-border/70 sm:h-[58vh] sm:min-h-[520px] md:h-auto md:min-h-0 md:flex-1"
+          }
+        >
+          <div className={immersive ? "hidden" : "pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-center gap-2 sm:inset-x-4 sm:top-4"}>
             <div className="rounded-full bg-background/92 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm">
               <MapPin className="mr-1 inline size-3.5" />
               {copy.map.satelliteEnabled}
@@ -553,7 +741,7 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             ) : null}
           </div>
           {summary.shapes.length > 0 ? (
-            <div className="pointer-events-none absolute inset-x-3 bottom-3 z-10 sm:left-4 sm:right-auto sm:max-w-[320px]">
+            <div className={immersive ? "hidden" : "pointer-events-none absolute inset-x-3 bottom-3 z-10 sm:left-4 sm:right-auto sm:max-w-[320px]"}>
               <div className="rounded-[1rem] border border-border/70 bg-background/95 px-4 py-3 shadow-sm backdrop-blur">
                 <div className="section-kicker text-primary">{copy.map.selectionReady}</div>
                 <div className="mt-2 grid grid-cols-2 gap-3">
@@ -575,7 +763,13 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             </div>
           ) : null}
           {solarSelectionMatch?.status === "outside-selection" || solarSelectionMatch?.status === "partial-selection" ? (
-            <div className="absolute inset-x-3 bottom-32 z-10 rounded-xl border border-amber-300 bg-amber-50/95 px-4 py-3 text-sm text-amber-900 shadow-sm backdrop-blur sm:inset-x-4 sm:bottom-4 sm:left-auto sm:max-w-[360px]">
+            <div
+              className={
+                immersive
+                  ? "absolute inset-x-3 top-[9rem] z-10 rounded-xl border border-amber-300 bg-amber-50/95 px-4 py-3 text-sm text-amber-900 shadow-sm backdrop-blur sm:inset-x-4 sm:left-auto sm:max-w-[360px]"
+                  : "absolute inset-x-3 bottom-32 z-10 rounded-xl border border-amber-300 bg-amber-50/95 px-4 py-3 text-sm text-amber-900 shadow-sm backdrop-blur sm:inset-x-4 sm:bottom-4 sm:left-auto sm:max-w-[360px]"
+              }
+            >
               <div className="font-medium">
                 {solarSelectionMatch.status === "partial-selection" ? copy.solar.mapOverlayPartial : copy.solar.mapOverlayUnmatched}
               </div>
@@ -592,17 +786,36 @@ export function Map({ value, onChange, onCenterChange, solarInsights, solarSelec
             </div>
           ) : null}
           {solarSelectionMatch?.status === "inside-selection" ? (
-            <div className="absolute inset-x-3 bottom-32 z-10 rounded-xl border border-emerald-200 bg-emerald-50/95 px-4 py-3 text-sm text-emerald-900 shadow-sm backdrop-blur sm:inset-x-4 sm:bottom-4 sm:left-auto sm:max-w-[360px]">
+            <div
+              className={
+                immersive
+                  ? "absolute inset-x-3 top-[9rem] z-10 rounded-xl border border-emerald-200 bg-emerald-50/95 px-4 py-3 text-sm text-emerald-900 shadow-sm backdrop-blur sm:inset-x-4 sm:left-auto sm:max-w-[360px]"
+                  : "absolute inset-x-3 bottom-32 z-10 rounded-xl border border-emerald-200 bg-emerald-50/95 px-4 py-3 text-sm text-emerald-900 shadow-sm backdrop-blur sm:inset-x-4 sm:bottom-4 sm:left-auto sm:max-w-[360px]"
+              }
+            >
               {copy.solar.mapOverlayMatched}
             </div>
           ) : null}
+          {isFlyoverActive ? (
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-[radial-gradient(circle_at_center,rgba(15,23,42,0.08),rgba(15,23,42,0.46))] backdrop-blur-[1px]">
+              <div className="rounded-full border border-white/25 bg-slate-950/80 px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-white shadow-[0_20px_60px_rgba(15,23,42,0.35)]">
+                {locale === "zh" ? "正在飞向客户屋顶" : locale === "th" ? "กำลังซูมไปยังไซต์ลูกค้า" : "Flying to site"}
+              </div>
+            </div>
+          ) : null}
           <GoogleMap
-            mapContainerClassName="h-full w-full"
+            mapContainerClassName={
+              immersive
+                ? "absolute inset-0 h-[calc(100vh-64px)] min-h-[680px] w-full sm:min-h-[720px]"
+                : "h-full w-full"
+            }
+            mapContainerStyle={immersiveMapContainerStyle}
             center={mapCenter}
             zoom={18}
             onLoad={(map) => {
               mapRef.current = map;
               map.setMapTypeId("satellite");
+              window.setTimeout(refreshMapSize, 0);
             }}
             options={{
               mapTypeControl: false,

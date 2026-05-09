@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   BrainCircuit,
   CheckCircle2,
@@ -10,12 +10,10 @@ import {
   Mail,
   MessageCircle,
   Phone,
-  Save,
   UserRound,
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { saveCustomerIntake } from "@/app/(sales)/customer-intake/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,10 +21,10 @@ import {
   EDUCATION_OPTIONS,
   getCustomerIntakeCompletion,
   getCustomerIntakeCopy,
-  initialCustomerIntakeSaveState,
   LARGE_APPLIANCE_OPTIONS,
   validateCustomerIntake,
   type CustomerIntake,
+  type CustomerIntakeSaveState,
   type LargeApplianceType,
 } from "@/lib/customer-intake";
 import type { AppLocale } from "@/lib/i18n";
@@ -35,13 +33,14 @@ interface CustomerIntakeCardProps {
   value: CustomerIntake;
   onChange: (value: CustomerIntake) => void;
   locale: AppLocale;
+  saveState: CustomerIntakeSaveState;
+  isSaving?: boolean;
 }
 
 type LocationStatus = "idle" | "loading" | "success" | "error";
 
-export function CustomerIntakeCard({ value, onChange, locale }: CustomerIntakeCardProps) {
+export function CustomerIntakeCard({ value, onChange, locale, saveState, isSaving = false }: CustomerIntakeCardProps) {
   const copy = getCustomerIntakeCopy(locale);
-  const [saveState, saveAction, isSaving] = useActionState(saveCustomerIntake, initialCustomerIntakeSaveState);
   const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
   const [locationMessage, setLocationMessage] = useState("");
   const completion = useMemo(() => getCustomerIntakeCompletion(value, locale), [locale, value]);
@@ -69,7 +68,24 @@ export function CustomerIntakeCard({ value, onChange, locale }: CustomerIntakeCa
       ? value.largeAppliances.filter((item) => item !== appliance)
       : [...value.largeAppliances, appliance];
 
-    onChange({ ...value, largeAppliances: nextAppliances });
+    onChange({
+      ...value,
+      largeAppliances: nextAppliances,
+      applianceQuantities: {
+        ...value.applianceQuantities,
+        [appliance]: value.applianceQuantities[appliance] || "1",
+      },
+    });
+  };
+
+  const setApplianceQuantity = (appliance: LargeApplianceType, nextValue: string) => {
+    onChange({
+      ...value,
+      applianceQuantities: {
+        ...value.applianceQuantities,
+        [appliance]: nextValue,
+      },
+    });
   };
 
   const useCurrentLocation = () => {
@@ -152,11 +168,7 @@ export function CustomerIntakeCard({ value, onChange, locale }: CustomerIntakeCa
         </div>
       </CardHeader>
       <CardContent>
-        <form action={saveAction} className="grid gap-4">
-          <input type="hidden" name="locale" value={locale} />
-          <input type="hidden" name="latitude" value={value.latitude} />
-          <input type="hidden" name="longitude" value={value.longitude} />
-
+        <div className="grid gap-4">
           <div className="grid gap-3 md:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
             <Field label={copy.fields.displayName} icon={UserRound}>
               <Input
@@ -322,7 +334,23 @@ export function CustomerIntakeCard({ value, onChange, locale }: CustomerIntakeCa
                           className="sr-only"
                         />
                         {checked ? <CheckCircle2 className="size-4" /> : null}
-                        {copy.applianceOptions[option.id]}
+                        <span>{copy.applianceOptions[option.id]}</span>
+                        {checked ? (
+                          <span className="flex items-center gap-1 rounded-full bg-white/15 px-2 py-1 text-xs">
+                            {copy.fields.applianceQuantity}
+                            <input
+                              name={`applianceQuantity.${option.id}`}
+                              value={value.applianceQuantities[option.id] || "1"}
+                              onChange={(event) => setApplianceQuantity(option.id, event.target.value)}
+                              onClick={(event) => event.stopPropagation()}
+                              min={1}
+                              max={50}
+                              inputMode="numeric"
+                              type="number"
+                              className="h-7 w-14 rounded-lg border border-white/25 bg-white/95 px-2 text-center text-xs font-semibold text-slate-950 outline-none"
+                            />
+                          </span>
+                        ) : null}
                       </label>
                     );
                   })}
@@ -354,14 +382,17 @@ export function CustomerIntakeCard({ value, onChange, locale }: CustomerIntakeCa
             </div>
           ) : null}
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm leading-6 text-muted-foreground">{copy.requiredRule}</p>
-            <Button type="submit" variant="outline" disabled={!validation.ready || isSaving} className="min-w-[150px]">
-              <Save className="size-4" />
-              {isSaving ? copy.saving : copy.save}
-            </Button>
+          <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-3 text-sm leading-6 text-muted-foreground">
+            {isSaving ? (
+              <span className="inline-flex items-center gap-2 font-medium text-slate-900">
+                <LoaderCircle className="size-4 animate-spin" />
+                {copy.saving}
+              </span>
+            ) : (
+              copy.autoSaveRule
+            )}
           </div>
-        </form>
+        </div>
       </CardContent>
     </Card>
   );

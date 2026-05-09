@@ -12,6 +12,8 @@ export type EducationBackground =
 
 export type LargeApplianceType = "aircon" | "refrigerator" | "bathtub" | "plant_grow" | "ev";
 
+export type ApplianceQuantityMap = Record<LargeApplianceType, string>;
+
 export interface CustomerIntake {
   displayName: string;
   age: string;
@@ -26,6 +28,7 @@ export interface CustomerIntake {
   annualIncomeTHB: string;
   educationBackground: EducationBackground;
   largeAppliances: LargeApplianceType[];
+  applianceQuantities: ApplianceQuantityMap;
   notes: string;
 }
 
@@ -54,6 +57,13 @@ export const initialCustomerIntake: CustomerIntake = {
   annualIncomeTHB: "",
   educationBackground: "unknown",
   largeAppliances: [],
+  applianceQuantities: {
+    aircon: "1",
+    refrigerator: "1",
+    bathtub: "1",
+    plant_grow: "1",
+    ev: "1",
+  },
   notes: "",
 };
 
@@ -78,12 +88,14 @@ export const LARGE_APPLIANCE_OPTIONS: Array<{
   crmLabel: string;
   type: string;
   inverterLoad: boolean;
+  ratedPowerW: number;
+  estimatedHoursPerDay: number;
 }> = [
-  { id: "aircon", label: "空调", crmLabel: "Air conditioner", type: "aircon", inverterLoad: true },
-  { id: "refrigerator", label: "冰箱", crmLabel: "Refrigerator", type: "refrigerator", inverterLoad: false },
-  { id: "bathtub", label: "浴缸/热水", crmLabel: "Bathtub / hot water", type: "hot_water", inverterLoad: true },
-  { id: "plant_grow", label: "植物/园艺照明", crmLabel: "Plant / grow lighting", type: "grow_light", inverterLoad: true },
-  { id: "ev", label: "新能源汽车", crmLabel: "Electric vehicle", type: "ev", inverterLoad: true },
+  { id: "aircon", label: "空调", crmLabel: "Air conditioner", type: "aircon", inverterLoad: true, ratedPowerW: 1200, estimatedHoursPerDay: 8 },
+  { id: "refrigerator", label: "冰箱", crmLabel: "Refrigerator", type: "refrigerator", inverterLoad: false, ratedPowerW: 150, estimatedHoursPerDay: 10 },
+  { id: "bathtub", label: "浴缸/热水", crmLabel: "Bathtub / hot water", type: "hot_water", inverterLoad: true, ratedPowerW: 2500, estimatedHoursPerDay: 1.2 },
+  { id: "plant_grow", label: "植物/园艺照明", crmLabel: "Plant / grow lighting", type: "grow_light", inverterLoad: true, ratedPowerW: 600, estimatedHoursPerDay: 8 },
+  { id: "ev", label: "新能源汽车", crmLabel: "Electric vehicle", type: "ev", inverterLoad: true, ratedPowerW: 3300, estimatedHoursPerDay: 3 },
 ];
 
 export const CUSTOMER_INTAKE_COPY = {
@@ -112,6 +124,7 @@ export const CUSTOMER_INTAKE_COPY = {
       annualIncomeTHB: "Annual income (THB)",
       educationBackground: "Education background",
       largeAppliances: "Major appliances",
+      applianceQuantity: "Qty",
       notes: "Notes",
     },
     placeholders: {
@@ -128,6 +141,7 @@ export const CUSTOMER_INTAKE_COPY = {
     optionalDescription: "Used later for customer scoring, ROI calibration, machine learning, and AI follow-up. It does not block the quick quote.",
     annualSpendHint: "Enter monthly bill to estimate automatically",
     requiredRule: "Required: customer name + address + one of phone/email/LINE. Saving creates a CRM customer ID.",
+    autoSaveRule: "Continue will save this customer automatically and open the roof map.",
     save: "Save to CRM",
     saving: "Saving...",
     useLocation: "Use current location",
@@ -190,6 +204,7 @@ export const CUSTOMER_INTAKE_COPY = {
       annualIncomeTHB: "年收入 THB",
       educationBackground: "受教育背景",
       largeAppliances: "大型用电器",
+      applianceQuantity: "数量",
       notes: "备注",
     },
     placeholders: {
@@ -206,6 +221,7 @@ export const CUSTOMER_INTAKE_COPY = {
     optionalDescription: "用于后续客户评级、ROI 校准、机器学习和 AI 跟进，不影响当前快速报价。",
     annualSpendHint: "填月电费后自动估算",
     requiredRule: "必填规则：客户姓名 + 住址 + 电话/邮箱/LINE 任意一种。保存后 CRM 会生成客户 ID。",
+    autoSaveRule: "点击继续会自动保存客户资料，然后进入屋顶地图。",
     save: "保存到 CRM",
     saving: "保存中...",
     useLocation: "使用当前位置",
@@ -268,6 +284,7 @@ export const CUSTOMER_INTAKE_COPY = {
       annualIncomeTHB: "รายได้ต่อปี (THB)",
       educationBackground: "ระดับการศึกษา",
       largeAppliances: "เครื่องใช้ไฟฟ้าหลัก",
+      applianceQuantity: "จำนวน",
       notes: "หมายเหตุ",
     },
     placeholders: {
@@ -284,6 +301,7 @@ export const CUSTOMER_INTAKE_COPY = {
     optionalDescription: "ใช้ภายหลังสำหรับให้คะแนนลูกค้า ปรับ ROI ทำ machine learning และให้ AI ช่วยติดตาม ไม่บล็อกการเสนอราคาเร็ว",
     annualSpendHint: "กรอกค่าไฟรายเดือน ระบบจะประเมินรายปีให้",
     requiredRule: "ข้อมูลที่ต้องมี: ชื่อลูกค้า + ที่อยู่ + เบอร์โทร/อีเมล/LINE อย่างน้อยหนึ่งช่องทาง เมื่อบันทึกแล้ว CRM จะสร้างรหัสลูกค้า",
+    autoSaveRule: "เมื่อกดไปต่อ ระบบจะบันทึกลูกค้าอัตโนมัติแล้วเปิดแผนที่หลังคา",
     save: "บันทึกเข้า CRM",
     saving: "กำลังบันทึก...",
     useLocation: "ใช้ตำแหน่งปัจจุบัน",
@@ -406,6 +424,7 @@ export function parseCustomerIntakeFormData(formData: FormData): CustomerIntake 
     annualIncomeTHB: formValue(formData, "annualIncomeTHB"),
     educationBackground: parseEducationBackground(formValue(formData, "educationBackground")),
     largeAppliances: formData.getAll("largeAppliances").filter(isLargeApplianceType),
+    applianceQuantities: parseApplianceQuantities(formData),
     notes: formValue(formData, "notes"),
   };
 }
@@ -420,6 +439,8 @@ export function parseOptionalNumber(value: string) {
 }
 
 export function buildCustomerFactorPayload(value: CustomerIntake) {
+  const selectedAppliances = getSelectedApplianceDetails(value);
+
   return {
     age: parseOptionalNumber(value.age),
     educationBackground: value.educationBackground,
@@ -427,7 +448,48 @@ export function buildCustomerFactorPayload(value: CustomerIntake) {
     monthlyElectricityBillTHB: parseOptionalNumber(value.monthlyElectricityBillTHB),
     annualElectricitySpendTHB: parseOptionalNumber(value.annualElectricitySpendTHB),
     largeAppliances: value.largeAppliances,
+    applianceDetails: selectedAppliances.map(({ option, quantity }) => ({
+      id: option.id,
+      type: option.type,
+      label: option.crmLabel,
+      quantity,
+      ratedPowerW: option.ratedPowerW,
+      estimatedHoursPerDay: option.estimatedHoursPerDay,
+      estimatedMonthlyKWh: estimateApplianceMonthlyKWh(option, quantity),
+    })),
+    estimatedApplianceMonthlyKWh: selectedAppliances.reduce(
+      (sum, item) => sum + estimateApplianceMonthlyKWh(item.option, item.quantity),
+      0,
+    ),
   };
+}
+
+export function getSelectedApplianceDetails(value: CustomerIntake) {
+  return LARGE_APPLIANCE_OPTIONS.filter((option) => value.largeAppliances.includes(option.id)).map((option) => ({
+    option,
+    quantity: getApplianceQuantity(value, option.id),
+  }));
+}
+
+export function getApplianceQuantity(value: CustomerIntake, appliance: LargeApplianceType) {
+  return normalizeApplianceQuantity(value.applianceQuantities[appliance] || "1");
+}
+
+export function normalizeApplianceQuantity(value: string) {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 1;
+  }
+
+  return Math.min(50, Math.floor(parsed));
+}
+
+export function estimateApplianceMonthlyKWh(
+  option: (typeof LARGE_APPLIANCE_OPTIONS)[number],
+  quantity: number,
+) {
+  return (option.ratedPowerW / 1000) * option.estimatedHoursPerDay * 30 * quantity;
 }
 
 function hasAnyContact(value: CustomerIntake) {
@@ -445,4 +507,11 @@ function parseEducationBackground(value: string): EducationBackground {
 
 function isLargeApplianceType(value: FormDataEntryValue): value is LargeApplianceType {
   return typeof value === "string" && LARGE_APPLIANCE_OPTIONS.some((option) => option.id === value);
+}
+
+function parseApplianceQuantities(formData: FormData): ApplianceQuantityMap {
+  return LARGE_APPLIANCE_OPTIONS.reduce((quantities, option) => {
+    quantities[option.id] = String(normalizeApplianceQuantity(formValue(formData, `applianceQuantity.${option.id}`) || "1"));
+    return quantities;
+  }, {} as ApplianceQuantityMap);
 }

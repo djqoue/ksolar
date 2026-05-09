@@ -169,6 +169,9 @@ export interface CreateHouseholdApplianceInput {
   orgId?: string | null;
   applianceType: string;
   label: string;
+  quantity?: number | null;
+  ratedPowerW?: number | null;
+  estimatedHoursPerDay?: number | null;
   inverterLoad?: boolean;
 }
 
@@ -262,7 +265,9 @@ export async function createHouseholdAppliances(client: DbClient, inputs: Create
         owner_user_id: input.ownerUserId,
         appliance_type: input.applianceType,
         label: input.label,
-        quantity: 1,
+        quantity: input.quantity ?? 1,
+        rated_power_w: input.ratedPowerW ?? null,
+        estimated_hours_per_day: input.estimatedHoursPerDay ?? null,
         inverter_load: input.inverterLoad ?? false,
       })),
     )
