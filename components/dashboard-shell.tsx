@@ -348,6 +348,8 @@ function DashboardShellContent() {
           annualGeneration: "年发电量",
           payback: "回本周期",
           investment: "总投资",
+          quickAdjust: "现场调整",
+          quickAdjustHint: "相位、系统和电池会即时影响报价。",
           phase: "电表相位",
           systemMode: "系统模式",
           battery: "电池策略",
@@ -374,6 +376,8 @@ function DashboardShellContent() {
             annualGeneration: "ไฟผลิตต่อปี",
             payback: "คืนทุน",
             investment: "เงินลงทุน",
+            quickAdjust: "ปรับหน้างาน",
+            quickAdjustHint: "เฟส ระบบ และแบตเตอรี่จะอัปเดตราคาเสนอทันที",
             phase: "เฟสไฟ",
             systemMode: "โหมดระบบ",
             battery: "แบตเตอรี่",
@@ -399,6 +403,8 @@ function DashboardShellContent() {
             annualGeneration: "Annual generation",
             payback: "Payback",
             investment: "Investment",
+            quickAdjust: "Field adjustments",
+            quickAdjustHint: "Phase, system mode, and battery update the quote instantly.",
             phase: "Phase",
             systemMode: "System mode",
             battery: "Battery",
@@ -706,7 +712,7 @@ function DashboardShellContent() {
           ) : null}
 
           {activeStep === 3 ? (
-            <section className="map-stage map-workspace-enter relative isolate h-[calc(100vh-64px)] min-h-[680px] overflow-hidden bg-slate-950 sm:min-h-[720px]">
+            <section className="map-stage map-workspace-enter relative isolate overflow-hidden bg-slate-950">
               <RoofReviewMap
                 selection={mapSelection}
                 solarInsights={activeSolarInsights}
@@ -717,23 +723,24 @@ function DashboardShellContent() {
                 onEditRoof={() => setActiveStep(2)}
               />
 
-              <aside className="pointer-events-none absolute inset-x-2 bottom-[calc(env(safe-area-inset-bottom)+0.6rem)] z-40 sm:inset-x-auto sm:inset-y-4 sm:right-4 sm:w-[410px]">
-                <div className="pointer-events-auto flex max-h-[72vh] flex-col overflow-hidden rounded-[1.45rem] border border-white/40 bg-white/[0.98] text-slate-950 shadow-[0_28px_90px_rgba(15,23,42,0.34)] backdrop-blur-xl sm:max-h-full">
-                  <div className="border-b border-slate-200/80 bg-white/[0.96] p-4 sm:p-5">
-                    <div className="flex items-start justify-between gap-3">
+              <aside className="pointer-events-none absolute inset-x-2 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-40 sm:inset-x-auto sm:inset-y-4 sm:right-4 sm:w-[410px]">
+                <div className="pointer-events-auto mx-auto flex max-h-[64dvh] max-w-[640px] flex-col overflow-hidden rounded-[1.55rem] border border-white/45 bg-white/[0.98] text-slate-950 shadow-[0_28px_90px_rgba(15,23,42,0.34)] backdrop-blur-xl sm:max-h-full sm:rounded-[1.45rem]">
+                  <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
+                  <div className="border-b border-slate-200/80 bg-white/[0.96] px-4 pb-3 pt-3 sm:p-5">
+                    <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="section-kicker text-primary">{step3Copy.eyebrow}</div>
-                        <h2 className="mt-1 text-[1.45rem] font-semibold leading-none tracking-[-0.055em] sm:text-[1.75rem]">
+                        <h2 className="mt-1 text-[1.35rem] font-semibold leading-none tracking-[-0.055em] sm:text-[1.75rem]">
                           {step3Copy.title}
                         </h2>
-                        <p className="mt-2 text-sm font-medium leading-5 text-slate-700">{step3Copy.description}</p>
+                        <p className="mt-1.5 line-clamp-2 text-[13px] font-medium leading-5 text-slate-700 sm:mt-2 sm:line-clamp-none sm:text-sm">{step3Copy.description}</p>
                       </div>
-                      <Button variant="outline" size="sm" className="shrink-0 rounded-full" onClick={() => setActiveStep(2)}>
+                      <Button variant="outline" size="sm" className="h-10 shrink-0 rounded-full px-3 text-xs sm:text-sm" onClick={() => setActiveStep(2)}>
                         {step3Copy.editRoof}
                       </Button>
                     </div>
 
-                    <div className="mt-3 rounded-2xl border border-slate-200 bg-white/[0.92] p-3">
+                    <div className="mt-2 rounded-2xl border border-slate-200 bg-white/[0.92] px-3 py-2.5 sm:mt-3 sm:p-3">
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -758,14 +765,14 @@ function DashboardShellContent() {
                         </Button>
                       </div>
                       {solarErrorMessage ? (
-                        <p className="mt-2 max-h-12 overflow-hidden break-words text-xs leading-5 text-amber-800">
+                        <p className="mt-2 max-h-10 overflow-hidden break-words text-xs leading-5 text-amber-800 sm:max-h-12">
                           {solarErrorMessage}
                         </p>
                       ) : null}
                     </div>
                   </div>
 
-                  <div className="min-h-0 overflow-y-auto p-3 sm:p-4">
+                  <div className="min-h-0 overflow-y-auto px-3 py-3 sm:p-4">
                     <div className="grid grid-cols-2 gap-2">
                       <SetupMetric
                         label={step3Copy.quoteSize}
@@ -786,52 +793,57 @@ function DashboardShellContent() {
                       />
                     </div>
 
-                    <div className="mt-3 grid gap-3 rounded-[1.2rem] border border-slate-200 bg-white/88 p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-950">{step3Copy.fieldReady}</div>
-                          <div className="mt-0.5 text-xs font-medium text-slate-600">
+                    <details className="group mt-3 rounded-[1.15rem] border border-slate-200 bg-white/90 p-3">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden">
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-slate-950">{step3Copy.quickAdjust}</span>
+                          <span className="mt-0.5 block truncate text-xs font-medium text-slate-600">
                             {topologySummary} · {pricingMeta.label} · {formatNumber(selectedPanelProfile.powerWp)}W
+                          </span>
+                        </span>
+                        <ChevronRight className="size-4 shrink-0 text-slate-500 transition group-open:rotate-90" />
+                      </summary>
+                      <div className="mt-3 grid gap-3">
+                        <p className="rounded-2xl bg-slate-50 px-3 py-2 text-xs font-medium leading-5 text-slate-600">
+                          {step3Copy.quickAdjustHint}
+                        </p>
+                        <div className="grid gap-1.5">
+                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{step3Copy.phase}</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <SetupChoice active={topology.phase === "1P"} label={copy.system.singlePhase} onClick={() => handleTopologyChange({ ...topology, phase: "1P" })} />
+                            <SetupChoice active={topology.phase === "3P"} label={copy.system.threePhase} onClick={() => handleTopologyChange({ ...topology, phase: "3P" })} />
+                          </div>
+                        </div>
+
+                        <div className="grid gap-1.5">
+                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{step3Copy.systemMode}</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <SetupChoice
+                              active={topology.mode === "ongrid"}
+                              label={copy.system.ongrid}
+                              onClick={() => handleTopologyChange({ ...topology, mode: "ongrid", batteryMode: "none" })}
+                            />
+                            <SetupChoice
+                              active={topology.mode === "hybrid"}
+                              label={copy.system.hybrid}
+                              onClick={() => handleTopologyChange({ ...topology, mode: "hybrid" })}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid gap-1.5">
+                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{step3Copy.battery}</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <SetupChoice active={topology.batteryMode === "none"} label={step3Copy.noBattery} onClick={() => handleTopologyChange({ ...topology, batteryMode: "none" })} />
+                            <SetupChoice
+                              active={topology.batteryMode === "with_battery"}
+                              label={step3Copy.withBattery}
+                              onClick={() => handleTopologyChange({ ...topology, mode: "hybrid", batteryMode: "with_battery" })}
+                            />
                           </div>
                         </div>
                       </div>
-
-                      <div className="grid gap-1.5">
-                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{step3Copy.phase}</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <SetupChoice active={topology.phase === "1P"} label={copy.system.singlePhase} onClick={() => handleTopologyChange({ ...topology, phase: "1P" })} />
-                          <SetupChoice active={topology.phase === "3P"} label={copy.system.threePhase} onClick={() => handleTopologyChange({ ...topology, phase: "3P" })} />
-                        </div>
-                      </div>
-
-                      <div className="grid gap-1.5">
-                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{step3Copy.systemMode}</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <SetupChoice
-                            active={topology.mode === "ongrid"}
-                            label={copy.system.ongrid}
-                            onClick={() => handleTopologyChange({ ...topology, mode: "ongrid", batteryMode: "none" })}
-                          />
-                          <SetupChoice
-                            active={topology.mode === "hybrid"}
-                            label={copy.system.hybrid}
-                            onClick={() => handleTopologyChange({ ...topology, mode: "hybrid" })}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid gap-1.5">
-                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{step3Copy.battery}</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <SetupChoice active={topology.batteryMode === "none"} label={step3Copy.noBattery} onClick={() => handleTopologyChange({ ...topology, batteryMode: "none" })} />
-                          <SetupChoice
-                            active={topology.batteryMode === "with_battery"}
-                            label={step3Copy.withBattery}
-                            onClick={() => handleTopologyChange({ ...topology, mode: "hybrid", batteryMode: "with_battery" })}
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    </details>
 
                     <details className="mt-3 rounded-[1.15rem] border border-slate-200 bg-white/[0.97] p-3">
                       <summary className="cursor-pointer list-none text-sm font-semibold text-slate-950 marker:hidden">

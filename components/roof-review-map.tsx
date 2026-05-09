@@ -77,6 +77,7 @@ export function RoofReviewMap({
           roofSegments: "坡面",
           selectedMask: "圈选屋顶",
           googleMask: "Google屋顶",
+          tap: "展开",
         }
       : locale === "th"
         ? {
@@ -88,6 +89,7 @@ export function RoofReviewMap({
             roofSegments: "หน้าหลังคา",
             selectedMask: "หลังคาที่เลือก",
             googleMask: "หลังคา Google",
+            tap: "แตะ",
           }
         : {
             title: "Layers",
@@ -98,6 +100,7 @@ export function RoofReviewMap({
             roofSegments: "Segments",
             selectedMask: "Selected roof",
             googleMask: "Google roof",
+            tap: "Tap",
           };
 
   const { isLoaded } = useJsApiLoader({
@@ -282,59 +285,73 @@ export function RoofReviewMap({
         position: "absolute" as const,
         inset: 0,
         width: "100%",
-        height: "calc(100vh - 64px)",
-        minHeight: "680px",
+        height: "100%",
+        minHeight: "100%",
       }
     : undefined;
+  const layerControls = (
+    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+      <LayerToggle
+        active={visibleLayers.annualFlux}
+        disabled={!dataLayerAnalysis?.annualFluxOverlay}
+        label={layerLabels.annualFlux}
+        icon={<SunMedium className="size-3.5" />}
+        onClick={() => setVisibleLayers((current) => ({ ...current, annualFlux: !current.annualFlux }))}
+      />
+      <LayerToggle
+        active={visibleLayers.panelArray}
+        disabled={!solarInsights?.solarPanels.length}
+        label={layerLabels.panelArray}
+        icon={<Grid2X2 className="size-3.5" />}
+        onClick={() => setVisibleLayers((current) => ({ ...current, panelArray: !current.panelArray }))}
+      />
+      <LayerToggle
+        active={visibleLayers.selectedRoof}
+        disabled={!selection.shapes.some((shape) => shape.path.length > 0)}
+        label={layerLabels.selectedRoof}
+        icon={<MapPinned className="size-3.5" />}
+        onClick={() => setVisibleLayers((current) => ({ ...current, selectedRoof: !current.selectedRoof }))}
+      />
+      <LayerToggle
+        active={visibleLayers.googleBoundary}
+        disabled={!solarInsights?.boundingBox}
+        label={layerLabels.googleBoundary}
+        onClick={() => setVisibleLayers((current) => ({ ...current, googleBoundary: !current.googleBoundary }))}
+      />
+      <LayerToggle
+        active={visibleLayers.roofSegments}
+        disabled={!solarInsights?.roofSegments.length}
+        label={layerLabels.roofSegments}
+        onClick={() => setVisibleLayers((current) => ({ ...current, roofSegments: !current.roofSegments }))}
+      />
+    </div>
+  );
 
   if (isImmersive) {
     return (
-      <div className="map-stage relative h-[calc(100vh-64px)] min-h-[680px] overflow-hidden bg-slate-950 sm:min-h-[720px]">
-        <div className="pointer-events-auto absolute left-2 top-2 z-20 w-[min(92vw,360px)] rounded-[1.15rem] border border-white/25 bg-slate-950/82 p-2 text-white shadow-[0_22px_70px_rgba(15,23,42,0.35)] backdrop-blur-2xl sm:left-4 sm:top-4">
+      <div className="map-stage relative overflow-hidden bg-slate-950">
+        <details className="pointer-events-auto absolute left-2 top-2 z-20 w-[min(78vw,300px)] rounded-[1.05rem] border border-white/25 bg-slate-950/82 p-2 text-white shadow-[0_22px_70px_rgba(15,23,42,0.35)] backdrop-blur-2xl sm:hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75 marker:hidden">
+            <span className="inline-flex items-center gap-2">
+              <Layers3 className="size-3.5" />
+              {layerLabels.title}
+            </span>
+            <span className="text-[10px] tracking-normal text-white/50">{layerLabels.tap}</span>
+          </summary>
+          <div className="mt-2">{layerControls}</div>
+        </details>
+
+        <div className="pointer-events-auto absolute left-4 top-4 z-20 hidden w-[min(92vw,360px)] rounded-[1.15rem] border border-white/25 bg-slate-950/82 p-2 text-white shadow-[0_22px_70px_rgba(15,23,42,0.35)] backdrop-blur-2xl sm:block">
           <div className="mb-2 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">
             <Layers3 className="size-3.5" />
             {layerLabels.title}
           </div>
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-            <LayerToggle
-              active={visibleLayers.annualFlux}
-              disabled={!dataLayerAnalysis?.annualFluxOverlay}
-              label={layerLabels.annualFlux}
-              icon={<SunMedium className="size-3.5" />}
-              onClick={() => setVisibleLayers((current) => ({ ...current, annualFlux: !current.annualFlux }))}
-            />
-            <LayerToggle
-              active={visibleLayers.panelArray}
-              disabled={!solarInsights?.solarPanels.length}
-              label={layerLabels.panelArray}
-              icon={<Grid2X2 className="size-3.5" />}
-              onClick={() => setVisibleLayers((current) => ({ ...current, panelArray: !current.panelArray }))}
-            />
-            <LayerToggle
-              active={visibleLayers.selectedRoof}
-              disabled={!selection.shapes.some((shape) => shape.path.length > 0)}
-              label={layerLabels.selectedRoof}
-              icon={<MapPinned className="size-3.5" />}
-              onClick={() => setVisibleLayers((current) => ({ ...current, selectedRoof: !current.selectedRoof }))}
-            />
-            <LayerToggle
-              active={visibleLayers.googleBoundary}
-              disabled={!solarInsights?.boundingBox}
-              label={layerLabels.googleBoundary}
-              onClick={() => setVisibleLayers((current) => ({ ...current, googleBoundary: !current.googleBoundary }))}
-            />
-            <LayerToggle
-              active={visibleLayers.roofSegments}
-              disabled={!solarInsights?.roofSegments.length}
-              label={layerLabels.roofSegments}
-              onClick={() => setVisibleLayers((current) => ({ ...current, roofSegments: !current.roofSegments }))}
-            />
-          </div>
+          {layerControls}
         </div>
 
         {isLoaded ? (
           <GoogleMap
-            mapContainerClassName="absolute inset-0 h-[calc(100vh-64px)] min-h-[680px] w-full sm:min-h-[720px]"
+            mapContainerClassName="absolute inset-0 h-full w-full"
             mapContainerStyle={immersiveMapContainerStyle}
             center={initialCenter}
             zoom={19}
