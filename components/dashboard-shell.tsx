@@ -105,7 +105,9 @@ function DashboardShellContent() {
   const [solarStatus, setSolarStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [solarErrorMessage, setSolarErrorMessage] = useState<string | null>(null);
   const crmEnabled = isSupabaseConfigured();
-  const allowCustomerIntakeSkip = process.env.NODE_ENV !== "production";
+  const allowCustomerIntakeSkip =
+    process.env.NODE_ENV !== "production" ||
+    process.env.NEXT_PUBLIC_ALLOW_CUSTOMER_INTAKE_SKIP === "true";
 
   const customerValidation = useMemo(() => validateCustomerIntake(customerIntake, locale), [customerIntake, locale]);
   const customerDone = allowCustomerIntakeSkip || (customerValidation.ready && customerSaveState.status === "success");
