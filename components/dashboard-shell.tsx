@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { startTransition, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, LoaderCircle, MapPinned, type LucideIcon, Settings2, Sparkles, UserRound } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, LoaderCircle, MapPinned, type LucideIcon, Settings2, Sparkles, UserRound } from "lucide-react";
 import { saveCustomerIntakeValue } from "@/app/(sales)/customer-intake/actions";
 import { LocaleProvider, useAppCopy, useLocaleContext } from "@/components/locale-provider";
 import { Map } from "@/components/Map";
@@ -93,6 +93,7 @@ function DashboardShellContent() {
     FINANCE_PRODUCTS.filter((product) => product.enabledByDefault).map((product) => product.id),
   );
   const [activeStep, setActiveStep] = useState<StepNumber>(1);
+  const [step3SheetExpanded, setStep3SheetExpanded] = useState(false);
   const [mapFlyoverRequestId, setMapFlyoverRequestId] = useState(0);
   const [ftRateTHBPerKWh, setFtRateTHBPerKWh] = useState<number>(SOLAR_DEFAULTS.defaultFtRateTHBPerKWh);
   const [selfConsumptionRatio, setSelfConsumptionRatio] = useState<number>(SOLAR_DEFAULTS.defaultSelfConsumptionRatio);
@@ -122,6 +123,12 @@ function DashboardShellContent() {
       setActiveStep(maxUnlockedStep);
     }
   }, [activeStep, maxUnlockedStep]);
+
+  useEffect(() => {
+    if (activeStep === 3) {
+      setStep3SheetExpanded(false);
+    }
+  }, [activeStep]);
 
   const solarRequestPoint = useMemo(
     () => getSelectionReferencePoint(mapSelection.shapes) || mapCenter,
@@ -348,6 +355,9 @@ function DashboardShellContent() {
           annualGeneration: "年发电量",
           payback: "回本周期",
           investment: "总投资",
+          expandDetails: "展开详情",
+          collapseDetails: "收起看屋顶",
+          compactSummary: "方案摘要",
           quickAdjust: "现场调整",
           quickAdjustHint: "相位、系统和电池会即时影响报价。",
           phase: "电表相位",
@@ -376,6 +386,9 @@ function DashboardShellContent() {
             annualGeneration: "ไฟผลิตต่อปี",
             payback: "คืนทุน",
             investment: "เงินลงทุน",
+            expandDetails: "ดูรายละเอียด",
+            collapseDetails: "ย่อเพื่อดูหลังคา",
+            compactSummary: "สรุปแพ็กเกจ",
             quickAdjust: "ปรับหน้างาน",
             quickAdjustHint: "เฟส ระบบ และแบตเตอรี่จะอัปเดตราคาเสนอทันที",
             phase: "เฟสไฟ",
@@ -403,6 +416,9 @@ function DashboardShellContent() {
             annualGeneration: "Annual generation",
             payback: "Payback",
             investment: "Investment",
+            expandDetails: "Expand details",
+            collapseDetails: "Collapse to roof",
+            compactSummary: "Plan summary",
             quickAdjust: "Field adjustments",
             quickAdjustHint: "Phase, system mode, and battery update the quote instantly.",
             phase: "Phase",
@@ -425,6 +441,13 @@ function DashboardShellContent() {
         : solarErrorMessage
           ? step3Copy.solarWarning
           : step3Copy.solarWaiting;
+  const quotedSizeValue = result.quotedSystemSizeWp > 0 ? `${formatNumber(result.quotedSystemSizeWp / 1000, 1)} kWp` : "N/A";
+  const paybackValue = result.paybackYears ? `${formatNumber(result.paybackYears, 1)} yr` : "N/A";
+  const annualGenerationValue = result.annualGenerationKWh > 0 ? `${formatNumber(result.annualGenerationKWh)} kWh` : "N/A";
+  const investmentValue =
+    result.finance.financeAdjustedPriceTHB > 0
+      ? `THB ${formatNumber(result.finance.financeAdjustedPriceTHB)}`
+      : "N/A";
 
   const fetchSolarData = async (requestPoint: SolarLatLng, requestKey: string) => {
     setSolarStatus("loading");
@@ -724,8 +747,62 @@ function DashboardShellContent() {
               />
 
               <aside className="pointer-events-none absolute inset-x-2 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-40 sm:inset-x-auto sm:inset-y-4 sm:right-4 sm:w-[410px]">
-                <div className="pointer-events-auto mx-auto flex max-h-[64dvh] max-w-[640px] flex-col overflow-hidden rounded-[1.55rem] border border-white/45 bg-white/[0.98] text-slate-950 shadow-[0_28px_90px_rgba(15,23,42,0.34)] backdrop-blur-xl sm:max-h-full sm:rounded-[1.45rem]">
-                  <div className="mx-auto mt-2 h-1.5 w-12 rounded-full bg-slate-200 sm:hidden" />
+                <div
+                  className={`pointer-events-auto mx-auto flex max-w-[640px] flex-col overflow-hidden rounded-[1.55rem] border border-white/45 bg-white/[0.98] text-slate-950 shadow-[0_28px_90px_rgba(15,23,42,0.34)] backdrop-blur-xl transition-[max-height] duration-300 sm:max-h-full sm:rounded-[1.45rem] ${
+                    step3SheetExpanded ? "max-h-[72dvh]" : "max-h-[218px]"
+                  }`}
+                >
+                  {!step3SheetExpanded ? (
+                    <div className="grid gap-3 p-3 sm:hidden">
+                      <button
+                        type="button"
+                        className="mx-auto h-1.5 w-12 rounded-full bg-slate-200"
+                        aria-label={step3Copy.expandDetails}
+                        onClick={() => setStep3SheetExpanded(true)}
+                      />
+                      <button
+                        type="button"
+                        className="grid gap-2 rounded-[1.2rem] text-left"
+                        onClick={() => setStep3SheetExpanded(true)}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="section-kicker text-primary">{step3Copy.compactSummary}</div>
+                            <div className="mt-1 truncate text-lg font-semibold tracking-[-0.045em] text-slate-950">
+                              {quotedSizeValue} · {paybackValue}
+                            </div>
+                            <div className="mt-1 truncate text-xs font-medium text-slate-600">
+                              {investmentValue} · {solarStateLabel}
+                            </div>
+                          </div>
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800">
+                            {step3Copy.expandDetails}
+                            <ChevronRight className="size-3.5" />
+                          </span>
+                        </div>
+                      </button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button variant="outline" size="lg" onClick={() => setActiveStep(2)}>
+                          <ChevronLeft className="size-4" />
+                          {copy.workflow.back}
+                        </Button>
+                        <Button size="lg" onClick={() => setActiveStep(4)}>
+                          {copy.workflow.openProposal}
+                          <ChevronRight className="size-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className={step3SheetExpanded ? "mx-auto mt-2 flex h-8 w-20 items-center justify-center sm:hidden" : "hidden"}>
+                    <button
+                      type="button"
+                      className="h-1.5 w-12 rounded-full bg-slate-200"
+                      aria-label={step3Copy.collapseDetails}
+                      onClick={() => setStep3SheetExpanded(false)}
+                    />
+                  </div>
+                  <div className={step3SheetExpanded ? "flex min-h-0 flex-1 flex-col sm:flex" : "hidden min-h-0 flex-1 flex-col sm:flex"}>
                   <div className="border-b border-slate-200/80 bg-white/[0.96] px-4 pb-3 pt-3 sm:p-5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -735,9 +812,15 @@ function DashboardShellContent() {
                         </h2>
                         <p className="mt-1.5 line-clamp-2 text-[13px] font-medium leading-5 text-slate-700 sm:mt-2 sm:line-clamp-none sm:text-sm">{step3Copy.description}</p>
                       </div>
-                      <Button variant="outline" size="sm" className="h-10 shrink-0 rounded-full px-3 text-xs sm:text-sm" onClick={() => setActiveStep(2)}>
-                        {step3Copy.editRoof}
-                      </Button>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Button variant="ghost" size="sm" className="h-10 rounded-full px-2 text-xs sm:hidden" onClick={() => setStep3SheetExpanded(false)}>
+                          <ChevronDown className="size-4" />
+                          {step3Copy.collapseDetails}
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-10 rounded-full px-3 text-xs sm:text-sm" onClick={() => setActiveStep(2)}>
+                          {step3Copy.editRoof}
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="mt-2 rounded-2xl border border-slate-200 bg-white/[0.92] px-3 py-2.5 sm:mt-3 sm:p-3">
@@ -776,20 +859,20 @@ function DashboardShellContent() {
                     <div className="grid grid-cols-2 gap-2">
                       <SetupMetric
                         label={step3Copy.quoteSize}
-                        value={result.quotedSystemSizeWp > 0 ? `${formatNumber(result.quotedSystemSizeWp / 1000, 1)} kWp` : "N/A"}
+                        value={quotedSizeValue}
                         tone="dark"
                       />
                       <SetupMetric
                         label={step3Copy.payback}
-                        value={result.paybackYears ? `${formatNumber(result.paybackYears, 1)} yr` : "N/A"}
+                        value={paybackValue}
                       />
                       <SetupMetric
                         label={step3Copy.annualGeneration}
-                        value={result.annualGenerationKWh > 0 ? `${formatNumber(result.annualGenerationKWh)} kWh` : "N/A"}
+                        value={annualGenerationValue}
                       />
                       <SetupMetric
                         label={step3Copy.investment}
-                        value={result.finance.financeAdjustedPriceTHB > 0 ? `THB ${formatNumber(result.finance.financeAdjustedPriceTHB)}` : "N/A"}
+                        value={investmentValue}
                       />
                     </div>
 
@@ -900,6 +983,7 @@ function DashboardShellContent() {
                       {copy.workflow.openProposal}
                       <ChevronRight className="size-4" />
                     </Button>
+                  </div>
                   </div>
                 </div>
               </aside>
