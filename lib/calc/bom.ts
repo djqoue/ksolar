@@ -1,3 +1,4 @@
+import { calcBomQuantities } from "@/lib/calc/bom-quantities";
 import { BOM_CATALOG } from "@/lib/config/bom-catalog";
 import { CAPACITY_TIERS } from "@/lib/config/solar";
 import type { BomCategory, BomLineItem, BomScenario, CapacityTier, SystemTopology } from "@/types/bom";
@@ -23,10 +24,18 @@ export interface EquipmentOverrides {
   battery?: ItemOverride;
 }
 
+/**
+ * Build a BOM scenario for the given topology, tier, and optional overrides.
+ *
+ * @param panelCount - When provided, mounting and DC electrical quantities are
+ *   computed from formulas (lib/calc/bom-quantities) rather than the static
+ *   tier template. Pass quotedTier.panelCount from the calc entry point.
+ */
 export function buildBomScenario(
   topology: SystemTopology,
   tier: CapacityTier,
   overrides?: EquipmentOverrides,
+  panelCount?: number,
 ): BomScenario | null {
   const template = BOM_CATALOG.find(
     (candidate) =>
@@ -40,39 +49,55 @@ export function buildBomScenario(
     return null;
   }
 
-  const lineItems: BomLineItem[] = template.lineItems.map((item) => {
-    // Panel override
-    if (overrides?.panel && item.category === "panel") {
+  // Formula-derived quantities for mounting + DC electrical items.
+  // Undefined when panelCount is not supplied — falls back to template values.
+  const formulaQty = panelCount != null ? calcBomQuantities(panelCount) : undefined;
+
+  const lineItems: BomLineItem[] = template.lineItems
+    .map((item) => {
+      // Apply formula quantity when available; fall back to template quantity.
+      const quantity = formulaQty?.[item.id] ?? item.quantity;
+
+      // Drop items the formula reduces to zero (e.g. mc4-branch for single-string).
+      if (quantity <= 0) return null;
+
+      // Panel override
+      if (overrides?.panel && item.category === "panel") {
+        return {
+          ...item,
+          quantity,
+          model: overrides.panel.model,
+          unitCostTHB: overrides.panel.unitCostTHB,
+          subtotalTHB: overrides.panel.unitCostTHB * quantity,
+        };
+      }
+      // Inverter override
+      if (overrides?.inverter && item.category === "inverter") {
+        return {
+          ...item,
+          quantity,
+          model: overrides.inverter.model,
+          unitCostTHB: overrides.inverter.unitCostTHB,
+          subtotalTHB: overrides.inverter.unitCostTHB * quantity,
+        };
+      }
+      // Battery pack override — skip cable items (id contains "cable")
+      if (overrides?.battery && item.category === "battery" && !item.id.includes("cable")) {
+        return {
+          ...item,
+          quantity,
+          model: overrides.battery.model,
+          unitCostTHB: overrides.battery.unitCostTHB,
+          subtotalTHB: overrides.battery.unitCostTHB * quantity,
+        };
+      }
       return {
         ...item,
-        model: overrides.panel.model,
-        unitCostTHB: overrides.panel.unitCostTHB,
-        subtotalTHB: overrides.panel.unitCostTHB * item.quantity,
+        quantity,
+        subtotalTHB: item.unitCostTHB * quantity,
       };
-    }
-    // Inverter override
-    if (overrides?.inverter && item.category === "inverter") {
-      return {
-        ...item,
-        model: overrides.inverter.model,
-        unitCostTHB: overrides.inverter.unitCostTHB,
-        subtotalTHB: overrides.inverter.unitCostTHB * item.quantity,
-      };
-    }
-    // Battery pack override — skip cable items (id contains "cable")
-    if (overrides?.battery && item.category === "battery" && !item.id.includes("cable")) {
-      return {
-        ...item,
-        model: overrides.battery.model,
-        unitCostTHB: overrides.battery.unitCostTHB,
-        subtotalTHB: overrides.battery.unitCostTHB * item.quantity,
-      };
-    }
-    return {
-      ...item,
-      subtotalTHB: item.unitCostTHB * item.quantity,
-    };
-  });
+    })
+    .filter((item): item is BomLineItem => item !== null);
 
   const categoryTotals = CATEGORIES.reduce<Record<BomCategory, number>>((accumulator, category) => {
     accumulator[category] = lineItems

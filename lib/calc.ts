@@ -138,7 +138,7 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
         : undefined,
   };
 
-  const bom = buildBomScenario(input.topology, quotedTier, equipmentOverrides);
+  const bom = buildBomScenario(input.topology, quotedTier, equipmentOverrides, quotedTier.panelCount);
 
   if (!bom) {
     return {
