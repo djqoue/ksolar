@@ -351,10 +351,18 @@ function DashboardShellContent() {
           solarWaiting: "等待 Google Solar",
           refresh: "刷新校验",
           editRoof: "重画屋顶",
+          roofMax: "屋顶上限",
+          maxPanels: "最多板数",
           quoteSize: "报价容量",
-          annualGeneration: "年发电量",
+          annualGeneration: "满铺年发电",
           payback: "回本周期",
           investment: "总投资",
+          googleMaxPanels: "Google 最大板数",
+          ksolarMaxPanels: "按当前组件可铺",
+          googleModeledArea: "Google 建模屋顶",
+          selectedArea: "你圈选屋顶",
+          partialAreaNotice: (googleArea: string, selectedArea: string) =>
+            `Google Solar 这次只建模约 ${googleArea}，明显小于你圈选的 ${selectedArea}。这通常表示它只识别到厂区里的一栋或一部分屋顶；要算整厂最大铺满，请逐栋点选/圈选，或先按手动画图面积估算。`,
           expandDetails: "展开详情",
           collapseDetails: "收起看屋顶",
           compactSummary: "方案摘要",
@@ -382,10 +390,18 @@ function DashboardShellContent() {
             solarWaiting: "รอ Google Solar",
             refresh: "ตรวจใหม่",
             editRoof: "แก้หลังคา",
+            roofMax: "ขนาดหลังคาสูงสุด",
+            maxPanels: "แผงสูงสุด",
             quoteSize: "ขนาดระบบ",
-            annualGeneration: "ไฟผลิตต่อปี",
+            annualGeneration: "ไฟผลิตสูงสุด/ปี",
             payback: "คืนทุน",
             investment: "เงินลงทุน",
+            googleMaxPanels: "แผงสูงสุด Google",
+            ksolarMaxPanels: "เทียบแผงปัจจุบัน",
+            googleModeledArea: "พื้นที่ Google",
+            selectedArea: "พื้นที่ที่เลือก",
+            partialAreaNotice: (googleArea: string, selectedArea: string) =>
+              `Google Solar สร้างโมเดลหลังคาเพียงประมาณ ${googleArea} ซึ่งเล็กกว่าพื้นที่ที่เลือก ${selectedArea} มาก มักแปลว่าระบบเห็นแค่อาคารบางส่วนในโรงงาน หากต้องการค่าสูงสุดทั้งโรงงาน ให้เลือก/วาดทีละอาคาร หรือใช้พื้นที่ที่วาดเองประเมินก่อน`,
             expandDetails: "ดูรายละเอียด",
             collapseDetails: "ย่อเพื่อดูหลังคา",
             compactSummary: "สรุปแพ็กเกจ",
@@ -412,10 +428,18 @@ function DashboardShellContent() {
             solarWaiting: "Waiting for Google Solar",
             refresh: "Refresh check",
             editRoof: "Edit roof",
+            roofMax: "Roof limit",
+            maxPanels: "Max panels",
             quoteSize: "Quote size",
-            annualGeneration: "Annual generation",
+            annualGeneration: "Max annual generation",
             payback: "Payback",
             investment: "Investment",
+            googleMaxPanels: "Google max panels",
+            ksolarMaxPanels: "Current module fit",
+            googleModeledArea: "Google modeled roof",
+            selectedArea: "Selected roof",
+            partialAreaNotice: (googleArea: string, selectedArea: string) =>
+              `Google Solar modeled about ${googleArea}, which is much smaller than your selected ${selectedArea}. That usually means it only recognized one building or part of the factory roof. For whole-factory max fill, select/draw each roof block or use the manual roof area estimate first.`,
             expandDetails: "Expand details",
             collapseDetails: "Collapse to roof",
             compactSummary: "Plan summary",
@@ -442,12 +466,28 @@ function DashboardShellContent() {
           ? step3Copy.solarWarning
           : step3Copy.solarWaiting;
   const quotedSizeValue = result.quotedSystemSizeWp > 0 ? `${formatNumber(result.quotedSystemSizeWp / 1000, 1)} kWp` : "N/A";
+  const roofLimitValue = result.roofFitSystemWp > 0 ? `${formatNumber(result.roofFitSystemWp / 1000, 1)} kWp` : "N/A";
+  const panelUnit = locale === "zh" ? "片" : locale === "th" ? "แผง" : "pcs";
+  const maxPanelValue = result.roofFitPanelCount > 0 ? `${formatNumber(result.roofFitPanelCount)} ${panelUnit}` : "N/A";
   const paybackValue = result.paybackYears ? `${formatNumber(result.paybackYears, 1)} yr` : "N/A";
-  const annualGenerationValue = result.annualGenerationKWh > 0 ? `${formatNumber(result.annualGenerationKWh)} kWh` : "N/A";
+  const annualGenerationValue =
+    result.roofPotentialAnnualGenerationKWh > 0
+      ? `${formatNumber(result.roofPotentialAnnualGenerationKWh)} kWh`
+      : "N/A";
   const investmentValue =
     result.finance.financeAdjustedPriceTHB > 0
       ? `THB ${formatNumber(result.finance.financeAdjustedPriceTHB)}`
       : "N/A";
+  const googleModeledRoofAreaM2 =
+    activeSolarInsights?.roofAreaMeters2 || activeSolarInsights?.roofGroundAreaMeters2 || null;
+  const selectedRoofAreaM2 = mapSelection.grossAreaM2 || null;
+  const shouldShowPartialGoogleAreaNotice =
+    Boolean(
+      googleModeledRoofAreaM2 &&
+        selectedRoofAreaM2 &&
+        selectedRoofAreaM2 > 0 &&
+        googleModeledRoofAreaM2 / selectedRoofAreaM2 < 0.65,
+    );
 
   const fetchSolarData = async (requestPoint: SolarLatLng, requestKey: string) => {
     setSolarStatus("loading");
@@ -742,6 +782,7 @@ function DashboardShellContent() {
                 solarDataLayers={activeSolarDataLayers}
                 selectionMatch={solarSelectionMatch}
                 fallbackCenter={solarRequestPoint}
+                sellablePanelProfile={selectedPanelProfile}
                 variant="immersive"
                 onEditRoof={() => setActiveStep(2)}
               />
@@ -852,27 +893,63 @@ function DashboardShellContent() {
                           {solarErrorMessage}
                         </p>
                       ) : null}
+                      {activeSolarInsights ? (
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <SetupMetric
+                            label={step3Copy.googleMaxPanels}
+                            value={`${formatNumber(activeSolarInsights.maxArrayPanelsCount)} ${panelUnit}`}
+                          />
+                          <SetupMetric
+                            label={step3Copy.ksolarMaxPanels}
+                            value={maxPanelValue}
+                          />
+                          <SetupMetric
+                            label={step3Copy.googleModeledArea}
+                            value={
+                              googleModeledRoofAreaM2
+                                ? `${formatNumber(googleModeledRoofAreaM2, 0)} m²`
+                                : "N/A"
+                            }
+                          />
+                          <SetupMetric
+                            label={step3Copy.selectedArea}
+                            value={
+                              selectedRoofAreaM2
+                                ? `${formatNumber(selectedRoofAreaM2, 0)} m²`
+                                : "N/A"
+                            }
+                          />
+                        </div>
+                      ) : null}
+                      {shouldShowPartialGoogleAreaNotice && googleModeledRoofAreaM2 && selectedRoofAreaM2 ? (
+                        <p className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-5 text-amber-950">
+                          {step3Copy.partialAreaNotice(
+                            `${formatNumber(googleModeledRoofAreaM2, 0)} m²`,
+                            `${formatNumber(selectedRoofAreaM2, 0)} m²`,
+                          )}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
 
                   <div className="min-h-0 overflow-y-auto px-3 py-3 sm:p-4">
                     <div className="grid grid-cols-2 gap-2">
                       <SetupMetric
-                        label={step3Copy.quoteSize}
-                        value={quotedSizeValue}
+                        label={step3Copy.maxPanels}
+                        value={maxPanelValue}
                         tone="dark"
                       />
                       <SetupMetric
-                        label={step3Copy.payback}
-                        value={paybackValue}
+                        label={step3Copy.roofMax}
+                        value={roofLimitValue}
                       />
                       <SetupMetric
                         label={step3Copy.annualGeneration}
                         value={annualGenerationValue}
                       />
                       <SetupMetric
-                        label={step3Copy.investment}
-                        value={investmentValue}
+                        label={step3Copy.quoteSize}
+                        value={quotedSizeValue}
                       />
                     </div>
 

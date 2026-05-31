@@ -10,7 +10,12 @@ import { RUNTIME_FALLBACKS } from "@/lib/config/runtime-fallbacks";
 import { GOOGLE_MAP_LIBRARIES } from "@/lib/maps";
 import { buildSolarDataLayerAnalysis } from "@/lib/solar-raster";
 import { formatNumber } from "@/lib/utils";
-import { buildGoogleSolarPanelFootprints, isSolarPointInsideSelection, type SolarSelectionMatchSummary } from "@/lib/solar";
+import {
+  buildGoogleSolarPanelFootprints,
+  isSolarPointInsideSelection,
+  type SellablePanelProfile,
+  type SolarSelectionMatchSummary,
+} from "@/lib/solar";
 import type { MapSelectionSummary } from "@/types/quote";
 import type { GoogleSolarDataLayerPaths, SolarDataLayerAnalysis, GoogleSolarSummary, SolarLatLng } from "@/types/solar";
 
@@ -20,6 +25,7 @@ interface RoofReviewMapProps {
   solarDataLayers?: GoogleSolarDataLayerPaths | null;
   selectionMatch?: SolarSelectionMatchSummary | null;
   fallbackCenter?: SolarLatLng | null;
+  sellablePanelProfile?: SellablePanelProfile;
   variant?: "card" | "immersive";
   onEditRoof: () => void;
 }
@@ -41,12 +47,15 @@ function selectionHasGeoShapes(selection: MapSelectionSummary) {
   return selection.shapes.some((shape) => shape.path.length > 0);
 }
 
+const MAX_RENDERED_PANEL_FOOTPRINTS = 5000;
+
 export function RoofReviewMap({
   selection,
   solarInsights,
   solarDataLayers,
   selectionMatch,
   fallbackCenter,
+  sellablePanelProfile,
   variant = "card",
   onEditRoof,
 }: RoofReviewMapProps) {
@@ -78,6 +87,10 @@ export function RoofReviewMap({
           selectedMask: "圈选屋顶",
           googleMask: "Google屋顶",
           tap: "展开",
+          maxFill: "最大铺满",
+          googleMax: "Google 400W",
+          ksolarMax: "KSolar 板型",
+          shownPanels: "图上显示",
         }
       : locale === "th"
         ? {
@@ -90,6 +103,10 @@ export function RoofReviewMap({
             selectedMask: "หลังคาที่เลือก",
             googleMask: "หลังคา Google",
             tap: "แตะ",
+            maxFill: "วางได้สูงสุด",
+            googleMax: "Google 400W",
+            ksolarMax: "แผง KSolar",
+            shownPanels: "แสดงบนแผนที่",
           }
         : {
             title: "Layers",
@@ -101,6 +118,10 @@ export function RoofReviewMap({
             selectedMask: "Selected roof",
             googleMask: "Google roof",
             tap: "Tap",
+            maxFill: "Max fill",
+            googleMax: "Google 400W",
+            ksolarMax: "KSolar panel",
+            shownPanels: "Shown",
           };
 
   const { isLoaded } = useJsApiLoader({
@@ -191,12 +212,54 @@ export function RoofReviewMap({
     : null;
   const hasSunAccess = averageSunAccessRatio !== null && averageSunAccessRatio > 0;
   const panelOverlay = useMemo(() => {
-    const panels = buildGoogleSolarPanelFootprints(solarInsights).slice(0, 220);
+    const allPanels = buildGoogleSolarPanelFootprints(solarInsights);
+    const panels = allPanels.slice(0, MAX_RENDERED_PANEL_FOOTPRINTS);
     const inside = panels.filter((panel) => isSolarPointInsideSelection(panel.center, selection.shapes));
     const outside = panels.filter((panel) => !isSolarPointInsideSelection(panel.center, selection.shapes));
 
-    return { inside, outside, total: panels.length };
+    return { inside, outside, rendered: panels.length, total: allPanels.length };
   }, [selection.shapes, solarInsights]);
+  const sellableMaxPanelCount =
+    solarInsights?.maxArrayAreaMeters2 && sellablePanelProfile?.areaM2
+      ? Math.floor(solarInsights.maxArrayAreaMeters2 / sellablePanelProfile.areaM2)
+      : null;
+  const sellableMaxKw =
+    sellableMaxPanelCount && sellablePanelProfile?.powerWp
+      ? (sellableMaxPanelCount * sellablePanelProfile.powerWp) / 1000
+      : null;
+  const googleMaxKw =
+    solarInsights && solarInsights.maxArrayPanelsCount > 0 && solarInsights.panelCapacityWatts > 0
+      ? (solarInsights.maxArrayPanelsCount * solarInsights.panelCapacityWatts) / 1000
+      : null;
+  const panelUnit = locale === "zh" ? "片" : locale === "th" ? "แผง" : "pcs";
+  const panelCapacityBadge = solarInsights ? (
+    <div className="mt-2 grid gap-2 rounded-[1rem] border border-white/15 bg-slate-950/82 p-2 text-white shadow-[0_16px_42px_rgba(15,23,42,0.22)]">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/55">
+        {layerLabels.maxFill}
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        <PanelCapacityStat
+          label={layerLabels.googleMax}
+          value={`${formatNumber(solarInsights.maxArrayPanelsCount)} ${panelUnit}`}
+          hint={googleMaxKw ? `${formatNumber(googleMaxKw, 1)} kWp` : undefined}
+        />
+        <PanelCapacityStat
+          label={layerLabels.ksolarMax}
+          value={sellableMaxPanelCount !== null ? `${formatNumber(sellableMaxPanelCount)} ${panelUnit}` : "N/A"}
+          hint={sellableMaxKw ? `${formatNumber(sellableMaxKw, 1)} kWp` : undefined}
+        />
+        <PanelCapacityStat
+          label={layerLabels.shownPanels}
+          value={
+            panelOverlay.rendered === panelOverlay.total
+              ? `${formatNumber(panelOverlay.rendered)} ${panelUnit}`
+              : `${formatNumber(panelOverlay.rendered)} / ${formatNumber(panelOverlay.total)}`
+          }
+          hint={solarInsights.imageryQuality}
+        />
+      </div>
+    </div>
+  ) : null;
 
   const initialCenter = useMemo(() => {
     if (solarInsights?.center) {
@@ -338,7 +401,10 @@ export function RoofReviewMap({
             </span>
             <span className="text-[10px] tracking-normal text-white/50">{layerLabels.tap}</span>
           </summary>
-          <div className="mt-2">{layerControls}</div>
+          <div className="mt-2">
+            {layerControls}
+            {panelCapacityBadge}
+          </div>
         </details>
 
         <div className="pointer-events-auto absolute left-4 top-4 z-20 hidden w-[min(92vw,360px)] rounded-[1.15rem] border border-white/25 bg-slate-950/82 p-2 text-white shadow-[0_22px_70px_rgba(15,23,42,0.35)] backdrop-blur-2xl sm:block">
@@ -347,6 +413,7 @@ export function RoofReviewMap({
             {layerLabels.title}
           </div>
           {layerControls}
+          {panelCapacityBadge}
         </div>
 
         {isLoaded ? (
@@ -660,6 +727,9 @@ export function RoofReviewMap({
                 onClick={() => setVisibleLayers((current) => ({ ...current, roofSegments: !current.roofSegments }))}
               />
             </div>
+            <div className="hidden text-slate-950 sm:block">
+              {panelCapacityBadge}
+            </div>
           </div>
 
           {isLoaded ? (
@@ -843,5 +913,25 @@ function LayerToggle({
       {icon}
       <span className="truncate">{label}</span>
     </button>
+  );
+}
+
+function PanelCapacityStat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-[0.8rem] bg-white/[0.08] px-2 py-1.5">
+      <div className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-white/46">
+        {label}
+      </div>
+      <div className="mt-0.5 truncate text-xs font-semibold text-white">{value}</div>
+      {hint ? <div className="mt-0.5 truncate text-[10px] font-medium text-white/50">{hint}</div> : null}
+    </div>
   );
 }
