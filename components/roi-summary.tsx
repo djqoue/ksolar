@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppCopy, useLocaleContext } from "@/components/locale-provider";
+import { localizeFinanceWarning } from "@/lib/i18n";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 import type { QuoteScenarioResult } from "@/types/quote";
 
@@ -209,7 +210,9 @@ export function RoiSummary({ result }: RoiSummaryProps) {
           ) : null}
           {result.finance.policyWarnings.length > 0 ? (
             <div className="mt-4 grid gap-1 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">
-              {result.finance.policyWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+              {result.finance.policyWarnings.map((warning) => (
+                <p key={warning}>{localizeFinanceWarning(locale, warning)}</p>
+              ))}
             </div>
           ) : null}
         </div>

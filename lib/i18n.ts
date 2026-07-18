@@ -1380,6 +1380,9 @@ export function localizeWarning(locale: AppLocale, warning: string) {
   const roofMatch = warning.match(
     /Selected roof area supports (\d+) panel\(s\), which is below the smallest (1P|3P) standard package\./,
   );
+  const dcAcRatioMatch = warning.match(
+    /^DC\/AC ratio ([\d.]+) is electrically supported but outside the preferred ([\d.]+)–([\d.]+) design range\.$/,
+  );
 
   if (roofMatch) {
     const panelCount = roofMatch[1];
@@ -1412,6 +1415,62 @@ export function localizeWarning(locale: AppLocale, warning: string) {
 
   if (warning === "Roof potential exceeds the committed BOM range for the selected phase. Engineering must confirm phase, inverter architecture, protection, structure, and interconnection before pricing.") {
     return copy.calc.warnings.engineeringReview;
+  }
+
+  if (dcAcRatioMatch) {
+    const [, ratio, minimum, maximum] = dcAcRatioMatch;
+
+    if (locale === "zh") {
+      return `DC/AC 比 ${ratio} 在电气允许范围内，但超出推荐设计区间 ${minimum}–${maximum}，需要工程复核。`;
+    }
+
+    if (locale === "th") {
+      return `อัตราส่วน DC/AC ${ratio} ยังอยู่ในช่วงไฟฟ้าที่รองรับ แต่เกินช่วงออกแบบที่แนะนำ ${minimum}–${maximum} จึงต้องให้วิศวกรตรวจสอบ`;
+    }
+  }
+
+  return warning;
+}
+
+export function localizeFinanceWarning(locale: AppLocale, warning: string) {
+  const expiredMatch = warning.match(
+    /^(.*) is outside its published validity window and must be re-verified\.$/,
+  );
+  const minimumLoanMatch = warning.match(
+    /^(.*) has a published minimum loan of THB ([\d,]+)\.$/,
+  );
+
+  if (
+    warning ===
+    "The THB 200,000 policy is a taxable-income deduction, not a cash rebate. No tax saving is included until taxable income or an explicit marginal rate is supplied."
+  ) {
+    if (locale === "zh") {
+      return "200,000 THB 政策是应税收入扣除，不是现金返还。未填写应税收入或明确边际税率前，系统不会计入节税收益。";
+    }
+
+    if (locale === "th") {
+      return "มาตรการ 200,000 บาทเป็นค่าลดหย่อนจากเงินได้ที่ต้องเสียภาษี ไม่ใช่เงินคืน ระบบจะยังไม่รวมประโยชน์ภาษีจนกว่าจะกรอกเงินได้สุทธิหรืออัตราภาษีส่วนเพิ่ม";
+    }
+  }
+
+  if (expiredMatch) {
+    if (locale === "zh") {
+      return `${expiredMatch[1]} 已超出公布有效期，使用前必须重新核验。`;
+    }
+
+    if (locale === "th") {
+      return `${expiredMatch[1]} อยู่นอกช่วงเวลาที่ประกาศไว้และต้องตรวจสอบใหม่ก่อนใช้งาน`;
+    }
+  }
+
+  if (minimumLoanMatch) {
+    if (locale === "zh") {
+      return `${minimumLoanMatch[1]} 公布的最低贷款金额为 THB ${minimumLoanMatch[2]}。`;
+    }
+
+    if (locale === "th") {
+      return `${minimumLoanMatch[1]} กำหนดยอดสินเชื่อขั้นต่ำไว้ที่ THB ${minimumLoanMatch[2]}`;
+    }
   }
 
   return warning;

@@ -8,10 +8,12 @@ import {
   buildSolarCrossCheckSummary,
   type SellablePanelProfile,
   type SolarCrossCheckSummary,
+  type SolarSelectionMatchStatus,
   type SolarSelectionMatchSummary,
 } from "@/lib/solar";
 import {
   localizeCalculationEntry,
+  localizeFinanceWarning,
   localizeWarning,
   type AppLocale,
 } from "@/lib/i18n";
@@ -394,7 +396,13 @@ function ProfessionalSolarReport({
               <ReportMetric label={labels.quality} value={solarInsights.imageryQuality} />
               <ReportMetric label={labels.imageryDate} value={solarInsights.imageryDate || "N/A"} />
               <ReportMetric label={labels.processedDate} value={processedDate || "N/A"} />
-              <ReportMetric label={labels.match} value={solarSelectionMatch?.status || "unavailable"} />
+              <ReportMetric
+                label={labels.match}
+                value={localizeSolarMatchStatus(
+                  locale,
+                  solarSelectionMatch?.status || "unavailable",
+                )}
+              />
               <ReportMetric
                 label={labels.overlap}
                 value={
@@ -434,12 +442,45 @@ function ProfessionalSolarReport({
         </p>
         {result.finance.policyWarnings.length > 0 ? (
           <div className="grid gap-1 text-sm text-amber-900">
-            {result.finance.policyWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+            {result.finance.policyWarnings.map((warning) => (
+              <p key={warning}>{localizeFinanceWarning(locale, warning)}</p>
+            ))}
           </div>
         ) : null}
       </CardContent>
     </Card>
   );
+}
+
+function localizeSolarMatchStatus(
+  locale: AppLocale,
+  status: SolarSelectionMatchStatus,
+) {
+  const labels: Record<AppLocale, Record<SolarSelectionMatchStatus, string>> = {
+    en: {
+      "inside-selection": "Matched",
+      "partial-selection": "Partial overlap",
+      "outside-selection": "Outside selection",
+      "manual-only": "Manual selection only",
+      unavailable: "Unavailable",
+    },
+    zh: {
+      "inside-selection": "完全匹配",
+      "partial-selection": "部分重叠",
+      "outside-selection": "圈选范围外",
+      "manual-only": "仅人工圈选",
+      unavailable: "无可用结果",
+    },
+    th: {
+      "inside-selection": "ตรงกับพื้นที่เลือก",
+      "partial-selection": "ทับซ้อนบางส่วน",
+      "outside-selection": "อยู่นอกพื้นที่เลือก",
+      "manual-only": "ใช้พื้นที่วาดเองเท่านั้น",
+      unavailable: "ไม่มีข้อมูล",
+    },
+  };
+
+  return labels[locale][status];
 }
 
 function ReportMetric({ label, value }: { label: string; value: string }) {
