@@ -1,60 +1,126 @@
+import { THAILAND_ENERGY_POLICY } from "@/lib/config/thailand-energy-policy";
 import type { FinanceProduct } from "@/types/finance";
 
+/**
+ * Only publicly verifiable products belong here. Product availability and
+ * approval always remain subject to the provider's final underwriting.
+ */
 export const FINANCE_PRODUCTS: FinanceProduct[] = [
   {
-    id: "bangkok-bank-poonphol-green-pea",
-    name: "Bangkok Bank Poonphol Green Solar",
+    id: "gsb-solar-for-life-clean-7y",
+    name: "GSB Solar for Life · Clean Loan",
     type: "loan",
     enabledByDefault: false,
-    annualRatePercent: 6.5,
+    customerSegments: ["residential"],
+    status: "confirmed",
+    termMonths: 84,
+    loanToValueRatio: 0.8,
+    maximumLoanTHB: 500_000,
+    rateSchedule: [
+      {
+        startMonth: 1,
+        endMonth: 24,
+        annualRatePercent: 3.5,
+        rateType: "fixed",
+      },
+      {
+        startMonth: 25,
+        endMonth: 60,
+        annualRatePercent: 5,
+        rateType: "fixed",
+      },
+      {
+        startMonth: 61,
+        endMonth: 84,
+        annualRatePercent: 6.045,
+        rateType: "floating-reference",
+        referenceRateName: "GSB MRR",
+        referenceRateAsOf: "2026-03-02",
+      },
+    ],
+    validFrom: "2026-03-02",
+    validTo: "2027-03-31",
+    lastVerifiedAt: "2026-07-18",
+    officialSourceUrl: "https://www.gsb.or.th/promotions/gsbsolar4life/",
+    eligibility:
+      "Individual borrower; clean-loan limit up to THB 500,000. The published general-customer schedule assumes 20% down payment.",
+    collateral: "No collateral for this clean-loan model; guarantor/insurance conditions may apply.",
+    notes:
+      "Years 1-2: 3.50%; years 3-5: 5.00%; year 6 onward uses the floating GSB MRR benchmark (6.045% as of 2 Mar 2026).",
+  },
+  {
+    id: "kbank-sme-solar-5y",
+    name: "KBank SME Solar Rooftop · up to 5 years",
+    type: "loan",
+    enabledByDefault: false,
+    customerSegments: ["sme"],
+    status: "confirmed",
     termMonths: 60,
     loanToValueRatio: 1,
-    notes: "Residential solar financing benchmark. Modeled as up to 100% of project price, but approval depends on collateral value, credit review, fees, and floating rates. Uses Bangkok Bank PEA page MRR assumption as of 26 Feb 2026: 6.50% p.a.",
+    rateSchedule: [
+      {
+        startMonth: 1,
+        endMonth: 60,
+        annualRatePercent: 5.52,
+        rateType: "floating-reference",
+        referenceRateName: "KBank MLR 6.52% minus 1.00%",
+        referenceRateAsOf: "2026-03-02",
+      },
+    ],
+    validTo: "2026-12-31",
+    lastVerifiedAt: "2026-07-18",
+    officialSourceUrl:
+      "https://www.kasikornbank.com/th/business/sme/loan/special-loan/pages/k-energy-saving-guarantee-program-solar-rooftop.aspx",
+    eligibility:
+      "Thai legal entity or registered commercial individual, normally operating for at least three years; equipment and project assessment must meet bank rules.",
+    collateral: "Collateral and final credit conditions are determined by KBank.",
+    notes:
+      "Published as MLR−1.00% for tenor up to 5 years. The model uses KBank MLR 6.52% effective 2 Mar 2026, so the reference rate is 5.52% and can change.",
   },
   {
-    id: "krungsri-sme-solar-rooftop",
-    name: "Krungsri SME Solar Rooftop",
+    id: "kbank-sme-solar-8y",
+    name: "KBank SME Solar Rooftop · up to 8 years",
     type: "loan",
     enabledByDefault: false,
-    annualRatePercent: 3.5,
-    termMonths: 84,
+    customerSegments: ["sme"],
+    status: "confirmed",
+    termMonths: 96,
     loanToValueRatio: 1,
-    notes: "Business-only reference: Krungsri SME Solar Rooftop advertises a special fixed rate from 3.5% p.a. for the first 2 years and maximum tenor up to 7 years. Do not use for normal residential customers unless they qualify as SME.",
-  },
-  {
-    id: "comsys-0-percent-6m",
-    name: "Comsys 0% 6 Months",
-    type: "installment",
-    enabledByDefault: false,
-    annualRatePercent: 0,
-    termMonths: 6,
-    notes: "Short-term instalment benchmark for low-friction sales closes.",
-  },
-  {
-    id: "saimai-10m-installment",
-    name: "Saimai 10-Month Installment",
-    type: "installment",
-    enabledByDefault: false,
-    annualRatePercent: 10,
-    termMonths: 10,
-    notes: "Reference instalment plan based on competitor field offers.",
+    rateSchedule: [
+      {
+        startMonth: 1,
+        endMonth: 96,
+        annualRatePercent: 5.72,
+        rateType: "floating-reference",
+        referenceRateName: "KBank MLR 6.52% minus 0.80%",
+        referenceRateAsOf: "2026-03-02",
+      },
+    ],
+    validTo: "2026-12-31",
+    lastVerifiedAt: "2026-07-18",
+    officialSourceUrl:
+      "https://www.kasikornbank.com/th/business/sme/loan/special-loan/pages/k-energy-saving-guarantee-program-solar-rooftop.aspx",
+    eligibility:
+      "Thai legal entity or registered commercial individual, normally operating for at least three years; equipment and project assessment must meet bank rules.",
+    collateral: "Collateral and final credit conditions are determined by KBank.",
+    notes:
+      "Published as MLR−0.80% for tenor above 5 and up to 8 years. The model uses KBank MLR 6.52% effective 2 Mar 2026, so the reference rate is 5.72% and can change.",
   },
   {
     id: "personal-income-tax-deduction",
-    name: "Thailand Solar Rooftop Tax Deduction",
-    type: "tax_credit",
-    enabledByDefault: true,
-    maxSubsidyTHB: 200000,
-    taxBenefitRatePercent: 20,
-    notes: "Royal Decree No. 805 / 2026: modelled as a one-time personal income tax deduction for qualifying on-grid residential solar expenses from 3 Mar 2026 to 31 Dec 2028, capped at THB 200,000. The calculator estimates cash benefit at 20% of the eligible deduction; actual tax benefit depends on taxpayer income and documentation.",
-  },
-  {
-    id: "unconfirmed-direct-subsidy-placeholder",
-    name: "Direct Subsidy Placeholder",
-    type: "subsidy",
+    name: "Thailand residential Solar Rooftop tax deduction",
+    type: "tax_deduction",
     enabledByDefault: false,
-    subsidyTHB: 0,
-    maxSubsidyTHB: 0,
-    notes: "Disabled until KSolar confirms an active direct-cash household subsidy. Net billing is handled through the export tariff input, not as a capex subsidy.",
+    customerSegments: ["residential"],
+    status: "confirmed",
+    maxSubsidyTHB: THAILAND_ENERGY_POLICY.residentialTaxDeduction.maximumDeductionTHB,
+    validFrom: THAILAND_ENERGY_POLICY.residentialTaxDeduction.validFrom,
+    validTo: THAILAND_ENERGY_POLICY.residentialTaxDeduction.validTo,
+    lastVerifiedAt: THAILAND_ENERGY_POLICY.lastVerifiedAt,
+    officialSourceUrl: THAILAND_ENERGY_POLICY.residentialTaxDeduction.sourceUrl,
+    eligibility:
+      "Individual taxpayer; qualifying grid-connected residential rooftop; full e-Tax invoice from a VAT-registered supplier; no duplicate incentive claim.",
+    notes:
+      "This is a deduction from taxable income, not a THB 200,000 rebate. KSolar calculates a benefit only when taxable income or an explicit marginal tax rate is provided.",
   },
 ];

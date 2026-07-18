@@ -27,7 +27,7 @@ import { formatNumber } from "@/lib/utils";
 import { SOLAR_DEFAULTS } from "@/lib/config/solar";
 import { buildGoogleSolarPanelFootprints, isSolarPointInsideSelection, type SolarSelectionMatchSummary } from "@/lib/solar";
 import type { MapSelectionSummary, RoofShape, ShapeKind } from "@/types/quote";
-import type { GoogleSolarSummary, SolarLatLng } from "@/types/solar";
+import type { GoogleSolarSummary, SolarLatLng, SolarPanelFootprint } from "@/types/solar";
 
 interface MapProps {
   value: MapSelectionSummary;
@@ -254,11 +254,19 @@ export function Map({
 
   const summary = value.grossAreaM2 > 0 ? value : createEmptyMapSelection();
   const panelOverlay = useMemo(() => {
-    const panels = buildGoogleSolarPanelFootprints(solarInsights).slice(0, 220);
-    const inside = panels.filter((panel) => isSolarPointInsideSelection(panel.center, summary.shapes));
-    const outside = panels.filter((panel) => !isSolarPointInsideSelection(panel.center, summary.shapes));
+    const inside = buildGoogleSolarPanelFootprints(solarInsights)
+      .filter((panel) =>
+        panel.path.every((corner) =>
+          isSolarPointInsideSelection(
+            { latitude: corner.lat, longitude: corner.lng },
+            summary.shapes,
+          ),
+        ),
+      )
+      .sort((left, right) => right.yearlyEnergyDcKwh - left.yearlyEnergyDcKwh)
+      .slice(0, 220);
 
-    return { inside, outside };
+    return { inside, outside: [] as SolarPanelFootprint[] };
   }, [solarInsights, summary.shapes]);
 
   const initializeDrawing = useCallback((map: google.maps.Map) => {

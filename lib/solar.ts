@@ -149,9 +149,17 @@ export interface SolarSelectionMatchSummary {
   distanceToNearestShapeMeters: number | null;
   isInsideSelection: boolean | null;
   overlapRatio: number | null;
+  areaAgreementRatio: number | null;
   matchedPoints: number;
   totalPoints: number;
+  fullyContainedPanels: number;
+  quoteEligible: boolean;
+  confidence: "quote-eligible" | "reference-only" | "unavailable";
+  confidenceReasons: string[];
 }
+
+export const SOLAR_QUOTE_MIN_FULL_PANEL_RATIO = 0.8;
+export const SOLAR_QUOTE_MIN_AREA_AGREEMENT_RATIO = 0.65;
 
 export function buildSolarSelectionMatchSummary(
   shapes: RoofShape[],
@@ -165,8 +173,13 @@ export function buildSolarSelectionMatchSummary(
       distanceToNearestShapeMeters: null,
       isInsideSelection: null,
       overlapRatio: null,
+      areaAgreementRatio: null,
       matchedPoints: 0,
       totalPoints: 0,
+      fullyContainedPanels: 0,
+      quoteEligible: false,
+      confidence: "unavailable",
+      confidenceReasons: ["Google Solar building insights are unavailable."],
     };
   }
 
@@ -177,27 +190,51 @@ export function buildSolarSelectionMatchSummary(
       distanceToNearestShapeMeters: null,
       isInsideSelection: null,
       overlapRatio: null,
+      areaAgreementRatio: null,
       matchedPoints: 0,
       totalPoints: 0,
+      fullyContainedPanels: 0,
+      quoteEligible: false,
+      confidence: "reference-only",
+      confidenceReasons: ["No geospatial roof selection is available for verification."],
     };
   }
 
   const selectionContainsPoint = (point: SolarLatLng) =>
     isSolarPointInsideSelection(point, geospatialShapes);
 
+  const panelFootprints = buildGoogleSolarPanelFootprints(solarSummary);
+  const fullyContainedPanels = panelFootprints.filter((panel) =>
+    panel.path.every((corner) =>
+      selectionContainsPoint({ latitude: corner.lat, longitude: corner.lng }),
+    ),
+  ).length;
   const samplePoints =
-    solarSummary?.solarPanels.length
-      ? solarSummary.solarPanels.map((panel) => panel.center)
+    panelFootprints.length > 0
+      ? []
       : solarSummary?.roofSegments.length
         ? solarSummary.roofSegments
             .map((segment) => segment.center)
             .filter((center): center is SolarLatLng => Boolean(center))
         : [buildingCenter];
 
-  const matchedPoints = samplePoints.filter((point) => selectionContainsPoint(point)).length;
-  const totalPoints = samplePoints.length;
+  const matchedPoints =
+    panelFootprints.length > 0
+      ? fullyContainedPanels
+      : samplePoints.filter((point) => selectionContainsPoint(point)).length;
+  const totalPoints = panelFootprints.length > 0 ? panelFootprints.length : samplePoints.length;
   const overlapRatio = totalPoints > 0 ? matchedPoints / totalPoints : null;
   const isInsideSelection = selectionContainsPoint(buildingCenter);
+  const selectedAreaMeters2 = geospatialShapes.reduce(
+    (total, shape) => total + (shape.areaM2 > 0 ? shape.areaM2 : 0),
+    0,
+  );
+  const modeledAreaMeters2 = solarSummary.roofAreaMeters2 ?? 0;
+  const areaAgreementRatio =
+    selectedAreaMeters2 > 0 && modeledAreaMeters2 > 0
+      ? Math.min(selectedAreaMeters2, modeledAreaMeters2) /
+        Math.max(selectedAreaMeters2, modeledAreaMeters2)
+      : null;
 
   const centroidDistances = geospatialShapes
     .map((shape) => getShapeCentroid(shape))
@@ -207,16 +244,55 @@ export function buildSolarSelectionMatchSummary(
   const distanceToNearestShapeMeters =
     centroidDistances.length > 0 ? Math.min(...centroidDistances) : null;
 
-  let status: SolarSelectionMatchStatus = "outside-selection";
+  const hasQuoteQuality =
+    solarSummary.imageryQuality === "HIGH" || solarSummary.imageryQuality === "MEDIUM";
+  const hasFullPanelEvidence = panelFootprints.length > 0;
+  const hasEnoughPanelOverlap =
+    overlapRatio !== null && overlapRatio >= SOLAR_QUOTE_MIN_FULL_PANEL_RATIO;
+  const hasEnoughAreaAgreement =
+    areaAgreementRatio !== null &&
+    areaAgreementRatio >= SOLAR_QUOTE_MIN_AREA_AGREEMENT_RATIO;
+  const hasSingleBuildingSelection = geospatialShapes.length === 1;
+  const quoteEligible =
+    hasQuoteQuality &&
+    hasFullPanelEvidence &&
+    hasEnoughPanelOverlap &&
+    hasEnoughAreaAgreement &&
+    hasSingleBuildingSelection &&
+    isInsideSelection;
 
-  if (overlapRatio !== null) {
-    if (overlapRatio >= 0.8) {
-      status = "inside-selection";
-    } else if (overlapRatio >= 0.2 || isInsideSelection) {
-      status = "partial-selection";
-    }
-  } else if (isInsideSelection) {
+  let status: SolarSelectionMatchStatus = "outside-selection";
+  if (quoteEligible) {
     status = "inside-selection";
+  } else if ((overlapRatio !== null && overlapRatio >= 0.2) || isInsideSelection) {
+    status = "partial-selection";
+  }
+
+  const confidenceReasons: string[] = [];
+  if (!hasQuoteQuality) {
+    confidenceReasons.push(
+      solarSummary.imageryQuality === "BASE"
+        ? "BASE satellite imagery is reference-only and cannot drive a formal quote."
+        : "Imagery quality is unknown and cannot drive a formal quote.",
+    );
+  }
+  if (!hasFullPanelEvidence) {
+    confidenceReasons.push("No complete Google panel footprints are available for selection verification.");
+  } else if (!hasEnoughPanelOverlap) {
+    confidenceReasons.push(
+      `Only ${fullyContainedPanels} of ${panelFootprints.length} Google panel footprints are fully contained in the selected roof.`,
+    );
+  }
+  if (!hasEnoughAreaAgreement) {
+    confidenceReasons.push("Selected and Google-modeled roof areas do not meet the quote confidence threshold.");
+  }
+  if (!isInsideSelection) {
+    confidenceReasons.push("The returned building center is outside the selected roof.");
+  }
+  if (!hasSingleBuildingSelection) {
+    confidenceReasons.push(
+      "Google Solar returned one nearby building, so a multi-roof selection remains manual until each building is analyzed separately.",
+    );
   }
 
   return {
@@ -224,8 +300,13 @@ export function buildSolarSelectionMatchSummary(
     distanceToNearestShapeMeters,
     isInsideSelection,
     overlapRatio,
+    areaAgreementRatio,
     matchedPoints,
     totalPoints,
+    fullyContainedPanels,
+    quoteEligible,
+    confidence: quoteEligible ? "quote-eligible" : "reference-only",
+    confidenceReasons,
   };
 }
 
@@ -312,7 +393,12 @@ export function getGoogleSolarSellableFit(
   equivalentPanelCount: number | null;
   layoutAreaM2: number | null;
 } {
-  if (!insights || insights.maxArrayAreaMeters2 <= 0) {
+  if (
+    !insights ||
+    insights.imageryQuality === "BASE" ||
+    insights.imageryQuality === "UNKNOWN" ||
+    insights.maxArrayAreaMeters2 <= 0
+  ) {
     return {
       equivalentKw: null,
       equivalentPanelCount: null,
@@ -390,10 +476,12 @@ export function buildSolarCrossCheckSummary(
 
   const confidenceSummary =
     insights.imageryQuality === "HIGH"
-      ? "High-confidence roof imagery. Suitable as a strong technical cross-check for roof fit and orientation."
+      ? "High-quality aerial source imagery. Use it as a remote-screening reference; it is not survey or engineering-grade measurement."
       : insights.imageryQuality === "MEDIUM"
-        ? "Medium-confidence imagery. Good for directional validation, but still worth checking odd roof edges manually."
-        : "Base-quality imagery only. Treat this as directional guidance, not a final engineering truth.";
+        ? "Medium-quality aerial imagery. Use it for directional validation and verify roof edges, obstacles, and setbacks on site."
+        : insights.imageryQuality === "BASE"
+          ? "Base-quality satellite imagery is reference-only and must not drive formal panel count, BOM, pricing, or yield."
+          : "Imagery quality is unknown. Do not use this result to drive a formal quote.";
 
   const usageSummary =
     "Use Google Solar for roof-fit, roof segments, and solar resource. Use the KSolar rule engine and your sellable module specs for panel count, BOM, pricing, and Thailand ROI.";
@@ -505,6 +593,77 @@ export function buildGoogleSolarPanelFootprints(
       })),
     };
   });
+}
+
+export interface SolarSelectionPanelUpperBound {
+  sourcePanelCount: number;
+  sourcePanelAreaM2: number;
+  sourceCapacityKw: number;
+  sourceYearlyEnergyDcKwh: number;
+  normalizedSellablePanelCount: number;
+  normalizedSellableCapacityKw: number;
+  quoteEligible: boolean;
+  referenceOnly: boolean;
+}
+
+/**
+ * A conservative, selection-scoped reference derived only from complete Google
+ * panel footprints inside the user's roof polygon. The sellable-module values
+ * remain area-normalized upper bounds, not a geometric layout.
+ */
+export function getGoogleSolarSelectionPanelUpperBound(
+  insights: GoogleSolarSummary | null | undefined,
+  shapes: RoofShape[],
+  profile?: Partial<SellablePanelProfile>,
+): SolarSelectionPanelUpperBound | null {
+  if (
+    !insights ||
+    insights.panelCapacityWatts <= 0 ||
+    insights.panelHeightMeters <= 0 ||
+    insights.panelWidthMeters <= 0
+  ) {
+    return null;
+  }
+
+  const fullyContainedPanels = buildGoogleSolarPanelFootprints(insights).filter(
+    (panel) =>
+      panel.yearlyEnergyDcKwh > 0 &&
+      panel.path.every((corner) =>
+        isSolarPointInsideSelection(
+          { latitude: corner.lat, longitude: corner.lng },
+          shapes,
+        ),
+      ),
+  );
+  if (fullyContainedPanels.length === 0) {
+    return null;
+  }
+
+  const sourcePanelAreaM2 =
+    fullyContainedPanels.length *
+    insights.panelHeightMeters *
+    insights.panelWidthMeters;
+  const sellablePanel = resolveSellablePanelProfile(profile);
+  const normalizedSellablePanelCount = Math.floor(
+    sourcePanelAreaM2 / sellablePanel.areaM2,
+  );
+  const selectionMatch = buildSolarSelectionMatchSummary(shapes, insights);
+
+  return {
+    sourcePanelCount: fullyContainedPanels.length,
+    sourcePanelAreaM2,
+    sourceCapacityKw:
+      (fullyContainedPanels.length * insights.panelCapacityWatts) / 1000,
+    sourceYearlyEnergyDcKwh: fullyContainedPanels.reduce(
+      (total, panel) => total + panel.yearlyEnergyDcKwh,
+      0,
+    ),
+    normalizedSellablePanelCount,
+    normalizedSellableCapacityKw:
+      (normalizedSellablePanelCount * sellablePanel.powerWp) / 1000,
+    quoteEligible: selectionMatch.quoteEligible,
+    referenceOnly: !selectionMatch.quoteEligible,
+  };
 }
 
 export function buildSellableSolarPanelFootprints(

@@ -1,6 +1,8 @@
-import { calcBomQuantities } from "@/lib/calc/bom-quantities";
+import {
+  calcBomQuantities,
+  type BomQuantityOptions,
+} from "@/lib/calc/bom-quantities";
 import { BOM_CATALOG } from "@/lib/config/bom-catalog";
-import { CAPACITY_TIERS } from "@/lib/config/solar";
 import type { BomCategory, BomLineItem, BomScenario, CapacityTier, SystemTopology } from "@/types/bom";
 
 const CATEGORIES: BomCategory[] = ["panel", "inverter", "battery", "mounting", "electrical", "labor", "other"];
@@ -24,18 +26,22 @@ export interface EquipmentOverrides {
   battery?: ItemOverride;
 }
 
+export interface BomBuildOptions extends BomQuantityOptions {
+  panelCount: number;
+}
+
 /**
  * Build a BOM scenario for the given topology, tier, and optional overrides.
  *
- * @param panelCount - When provided, mounting and DC electrical quantities are
- *   computed from formulas (lib/calc/bom-quantities) rather than the static
- *   tier template. Pass quotedTier.panelCount from the calc entry point.
+ * @param panelCountOrOptions - When provided, module, mounting, and DC
+ *   electrical quantities are computed from the selected equipment rather than
+ *   copied from a static 650 W package. A number retains the legacy API.
  */
 export function buildBomScenario(
   topology: SystemTopology,
   tier: CapacityTier,
   overrides?: EquipmentOverrides,
-  panelCount?: number,
+  panelCountOrOptions?: number | BomBuildOptions,
 ): BomScenario | null {
   const template = BOM_CATALOG.find(
     (candidate) =>
@@ -49,14 +55,20 @@ export function buildBomScenario(
     return null;
   }
 
-  // Formula-derived quantities for mounting + DC electrical items.
-  // Undefined when panelCount is not supplied — falls back to template values.
-  const formulaQty = panelCount != null ? calcBomQuantities(panelCount) : undefined;
+  const buildOptions: BomBuildOptions | undefined =
+    typeof panelCountOrOptions === "number"
+      ? { panelCount: panelCountOrOptions }
+      : panelCountOrOptions;
+  const formulaQty = buildOptions
+    ? calcBomQuantities(buildOptions.panelCount, buildOptions)
+    : undefined;
 
   const lineItems: BomLineItem[] = template.lineItems
     .map((item) => {
-      // Apply formula quantity when available; fall back to template quantity.
-      const quantity = formulaQty?.[item.id] ?? item.quantity;
+      const quantity =
+        buildOptions && item.category === "panel"
+          ? buildOptions.panelCount
+          : formulaQty?.[item.id] ?? item.quantity;
 
       // Drop items the formula reduces to zero (e.g. mc4-branch for single-string).
       if (quantity <= 0) return null;
@@ -108,7 +120,7 @@ export function buildBomScenario(
 
   return {
     topology,
-    tier: CAPACITY_TIERS.find((candidate) => candidate.id === tier.id) || tier,
+    tier,
     lineItems,
     categoryTotals,
     hardwareCostTHB: lineItems.reduce((sum, item) => sum + item.subtotalTHB, 0),

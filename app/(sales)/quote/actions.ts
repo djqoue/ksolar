@@ -285,18 +285,44 @@ function validateQuoteInput(value: Record<string, unknown>) {
   ) {
     throw new QuoteInputError("Quote input is missing its map, topology, pricing, or finance selection.");
   }
+
+  if (value.capacityIntent !== undefined && value.capacityIntent !== null) {
+    if (!isRecord(value.capacityIntent)) {
+      throw new QuoteInputError("Quote capacity intent is invalid.");
+    }
+
+    if (value.capacityIntent.mode === "roof-potential") {
+      throw new QuoteInputError(
+        "Roof potential is a technical assessment and cannot be saved as a formal quote.",
+      );
+    }
+
+    if (
+      value.capacityIntent.mode !== "standard"
+      || ![5, 10, 15, 20].includes(value.capacityIntent.targetKW as number)
+    ) {
+      throw new QuoteInputError("Standard quote capacity intent is invalid.");
+    }
+  }
 }
 
 function validateQuoteResult(value: Record<string, unknown>) {
+  const isRoofPotential =
+    isRecord(value.capacityIntent) && value.capacityIntent.mode === "roof-potential";
+
   if (
     value.isViable !== true
+    || value.quoteReady !== true
+    || value.quoteReadiness !== "ready"
+    || isRoofPotential
     || !isRecord(value.recommendedTier)
     || typeof value.recommendedTier.id !== "string"
     || !Array.isArray(value.warnings)
     || !Array.isArray(value.explanation)
     || !isRecord(value.finance)
+    || !isRecord(value.bom)
   ) {
-    throw new QuoteInputError("Only a complete, viable quote result can be saved.");
+    throw new QuoteInputError("Only a complete, quote-ready formal result can be saved.");
   }
 
   for (const field of [

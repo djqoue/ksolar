@@ -19,6 +19,11 @@ export interface SystemTopology {
 
 export interface CapacityTier {
   id: CapacityTierId;
+  /**
+   * Customer-facing target size for the package. The installed DC size can be
+   * slightly higher because whole modules are required.
+   */
+  targetWp?: number;
   nominalWp: number;
   panelCount: number;
   panelPowerWp: number;
@@ -51,4 +56,3 @@ export interface BomScenario {
   categoryTotals: Record<BomCategory, number>;
   hardwareCostTHB: number;
 }
-

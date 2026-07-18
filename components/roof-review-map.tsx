@@ -12,13 +12,13 @@ import { buildSolarDataLayerAnalysis } from "@/lib/solar-raster";
 import { formatNumber } from "@/lib/utils";
 import {
   buildGoogleSolarPanelFootprints,
-  buildSellableSolarPanelFootprints,
+  getGoogleSolarSelectionPanelUpperBound,
   isSolarPointInsideSelection,
   type SellablePanelProfile,
   type SolarSelectionMatchSummary,
 } from "@/lib/solar";
 import type { MapSelectionSummary } from "@/types/quote";
-import type { GoogleSolarDataLayerPaths, SolarDataLayerAnalysis, GoogleSolarSummary, SolarLatLng } from "@/types/solar";
+import type { GoogleSolarDataLayerPaths, SolarDataLayerAnalysis, GoogleSolarSummary, SolarLatLng, SolarPanelFootprint } from "@/types/solar";
 
 interface RoofReviewMapProps {
   selection: MapSelectionSummary;
@@ -27,6 +27,7 @@ interface RoofReviewMapProps {
   selectionMatch?: SolarSelectionMatchSummary | null;
   fallbackCenter?: SolarLatLng | null;
   sellablePanelProfile?: SellablePanelProfile;
+  selectedPanelCount?: number | null;
   variant?: "card" | "immersive";
   onEditRoof: () => void;
 }
@@ -57,6 +58,7 @@ export function RoofReviewMap({
   selectionMatch,
   fallbackCenter,
   sellablePanelProfile,
+  selectedPanelCount,
   variant = "card",
   onEditRoof,
 }: RoofReviewMapProps) {
@@ -82,51 +84,57 @@ export function RoofReviewMap({
       ? {
           title: "图层",
           annualFlux: "热力图",
-          maxLayout: "满铺布局",
-          panelArray: "板阵列",
+          maxLayout: "当前方案参考位",
+          panelArray: "Google 参考板位",
           selectedRoof: "圈选屋顶",
           googleBoundary: "Google边界",
           roofSegments: "坡面",
           selectedMask: "圈选屋顶",
           googleMask: "Google屋顶",
           tap: "展开",
-          maxFill: "最大铺满",
-          googleMax: "Google 400W",
-          ksolarMax: "KSolar 板型",
-          shownPanels: "图上显示",
+          maxFill: "圈选范围校验",
+          googleMax: "完整落入圈选",
+          ksolarMax: "KSolar 面积上限",
+          shownPanels: "当前方案参考位",
+          referenceOnly: "远程参考；未通过正式报价门槛",
+          quoteEligible: "已通过圈选与影像质量门槛",
         }
       : locale === "th"
         ? {
             title: "เลเยอร์",
           annualFlux: "ความร้อน",
-          maxLayout: "วางเต็ม",
-          panelArray: "แผง",
+          maxLayout: "ตำแหน่งอ้างอิงแผนปัจจุบัน",
+          panelArray: "ตำแหน่งอ้างอิง Google",
             selectedRoof: "หลังคาที่เลือก",
             googleBoundary: "ขอบ Google",
             roofSegments: "หน้าหลังคา",
             selectedMask: "หลังคาที่เลือก",
             googleMask: "หลังคา Google",
             tap: "แตะ",
-            maxFill: "วางได้สูงสุด",
-            googleMax: "Google 400W",
-            ksolarMax: "แผง KSolar",
-            shownPanels: "แสดงบนแผนที่",
+            maxFill: "ตรวจสอบพื้นที่ที่เลือก",
+            googleMax: "อยู่ในพื้นที่ทั้งหมด",
+            ksolarMax: "ขีดบนตามพื้นที่ KSolar",
+            shownPanels: "ตำแหน่งอ้างอิงแผน",
+            referenceOnly: "อ้างอิงระยะไกล ยังไม่ผ่านเกณฑ์เสนอราคา",
+            quoteEligible: "ผ่านเกณฑ์พื้นที่และคุณภาพภาพ",
           }
         : {
             title: "Layers",
             annualFlux: "Heatmap",
-            maxLayout: "Max layout",
-            panelArray: "Panels",
+            maxLayout: "Current plan refs",
+            panelArray: "Google panel refs",
             selectedRoof: "Selection",
             googleBoundary: "Google edge",
             roofSegments: "Segments",
             selectedMask: "Selected roof",
             googleMask: "Google roof",
             tap: "Tap",
-            maxFill: "Max fill",
-            googleMax: "Google 400W",
-            ksolarMax: "KSolar panel",
-            shownPanels: "Shown",
+            maxFill: "Selected-area check",
+            googleMax: "Fully contained",
+            ksolarMax: "KSolar area upper bound",
+            shownPanels: "Current plan refs",
+            referenceOnly: "Remote reference; formal quote gate not passed",
+            quoteEligible: "Selection and imagery gates passed",
           };
 
   const { isLoaded } = useJsApiLoader({
@@ -139,9 +147,11 @@ export function RoofReviewMap({
 
     if (!solarDataLayers) {
       setDataLayerAnalysis(null);
+      setIsAnalyzingLayers(false);
       return;
     }
 
+    setDataLayerAnalysis(null);
     setIsAnalyzingLayers(true);
     buildSolarDataLayerAnalysis(solarDataLayers, selection.shapes)
       .then((analysis) => {
@@ -218,32 +228,63 @@ export function RoofReviewMap({
   const hasSunAccess = averageSunAccessRatio !== null && averageSunAccessRatio > 0;
   const panelOverlay = useMemo(() => {
     const allPanels = buildGoogleSolarPanelFootprints(solarInsights);
-    const panels = allPanels.slice(0, MAX_RENDERED_PANEL_FOOTPRINTS);
-    const inside = panels.filter((panel) => isSolarPointInsideSelection(panel.center, selection.shapes));
-    const outside = panels.filter((panel) => !isSolarPointInsideSelection(panel.center, selection.shapes));
+    const fullyContainedPanels = allPanels
+      .filter((panel) =>
+        panel.path.every((corner) =>
+          isSolarPointInsideSelection(
+            { latitude: corner.lat, longitude: corner.lng },
+            selection.shapes,
+          ),
+        ),
+      )
+      .sort((left, right) => right.yearlyEnergyDcKwh - left.yearlyEnergyDcKwh);
+    const inside = fullyContainedPanels.slice(0, MAX_RENDERED_PANEL_FOOTPRINTS);
 
-    return { inside, outside, rendered: panels.length, total: allPanels.length };
+    return {
+      inside,
+      outside: [] as SolarPanelFootprint[],
+      rendered: inside.length,
+      fullyContainedTotal: fullyContainedPanels.length,
+      total: allPanels.length,
+    };
   }, [selection.shapes, solarInsights]);
   const maxLayoutOverlay = useMemo(() => {
-    const allPanels = buildSellableSolarPanelFootprints(solarInsights, sellablePanelProfile);
-    const panels = allPanels.slice(0, MAX_RENDERED_PANEL_FOOTPRINTS);
-    const inside = panels.filter((panel) => isSolarPointInsideSelection(panel.center, selection.shapes));
-    const outside = panels.filter((panel) => !isSolarPointInsideSelection(panel.center, selection.shapes));
+    if (!selectionMatch?.quoteEligible || !selectedPanelCount || selectedPanelCount <= 0) {
+      return {
+        inside: [] as SolarPanelFootprint[],
+        outside: [] as SolarPanelFootprint[],
+        rendered: 0,
+        total: 0,
+      };
+    }
 
-    return { inside, outside, rendered: panels.length, total: allPanels.length };
-  }, [selection.shapes, sellablePanelProfile, solarInsights]);
-  const sellableMaxPanelCount =
-    solarInsights?.maxArrayAreaMeters2 && sellablePanelProfile?.areaM2
-      ? Math.floor(solarInsights.maxArrayAreaMeters2 / sellablePanelProfile.areaM2)
-      : null;
+    const inside = panelOverlay.inside.slice(
+      0,
+      Math.min(selectedPanelCount, MAX_RENDERED_PANEL_FOOTPRINTS),
+    );
+
+    return {
+      inside,
+      outside: [] as SolarPanelFootprint[],
+      rendered: inside.length,
+      total: selectedPanelCount,
+    };
+  }, [panelOverlay.inside, selectedPanelCount, selectionMatch?.quoteEligible]);
+  const selectionPanelUpperBound = useMemo(
+    () =>
+      getGoogleSolarSelectionPanelUpperBound(
+        solarInsights,
+        selection.shapes,
+        sellablePanelProfile,
+      ),
+    [selection.shapes, sellablePanelProfile, solarInsights],
+  );
+  const sellableMaxPanelCount = selectionPanelUpperBound?.normalizedSellablePanelCount ?? null;
   const sellableMaxKw =
     sellableMaxPanelCount && sellablePanelProfile?.powerWp
       ? (sellableMaxPanelCount * sellablePanelProfile.powerWp) / 1000
       : null;
-  const googleMaxKw =
-    solarInsights && solarInsights.maxArrayPanelsCount > 0 && solarInsights.panelCapacityWatts > 0
-      ? (solarInsights.maxArrayPanelsCount * solarInsights.panelCapacityWatts) / 1000
-      : null;
+  const googleMaxKw = selectionPanelUpperBound?.sourceCapacityKw ?? null;
   const panelUnit = locale === "zh" ? "片" : locale === "th" ? "แผง" : "pcs";
   const panelCapacityBadge = solarInsights ? (
     <div className="mt-2 grid gap-2 rounded-[1rem] border border-white/15 bg-slate-950/82 p-2 text-white shadow-[0_16px_42px_rgba(15,23,42,0.22)]">
@@ -253,7 +294,7 @@ export function RoofReviewMap({
       <div className="grid grid-cols-3 gap-1.5">
         <PanelCapacityStat
           label={layerLabels.googleMax}
-          value={`${formatNumber(solarInsights.maxArrayPanelsCount)} ${panelUnit}`}
+          value={`${formatNumber(panelOverlay.fullyContainedTotal)} ${panelUnit}`}
           hint={googleMaxKw ? `${formatNumber(googleMaxKw, 1)} kWp` : undefined}
         />
         <PanelCapacityStat
@@ -271,14 +312,14 @@ export function RoofReviewMap({
           hint={solarInsights.imageryQuality}
         />
       </div>
+      <div className="rounded-xl border border-white/10 bg-white/[0.06] px-2.5 py-2 text-[10px] font-medium leading-4 text-white/65">
+        {selectionMatch?.quoteEligible ? layerLabels.quoteEligible : layerLabels.referenceOnly}
+        <span className="mt-1 block text-white/45">Source: Includes solar data from Google</span>
+      </div>
     </div>
   ) : null;
 
   const initialCenter = useMemo(() => {
-    if (solarInsights?.center) {
-      return { lat: solarInsights.center.latitude, lng: solarInsights.center.longitude };
-    }
-
     const firstPoint = selection.shapes.find((shape) => shape.path.length > 0)?.path[0];
     if (firstPoint) {
       return firstPoint;
@@ -286,6 +327,10 @@ export function RoofReviewMap({
 
     if (fallbackCenter) {
       return { lat: fallbackCenter.latitude, lng: fallbackCenter.longitude };
+    }
+
+    if (solarInsights?.center) {
+      return { lat: solarInsights.center.latitude, lng: solarInsights.center.longitude };
     }
 
     return { lat: 13.7563, lng: 100.5018 };
@@ -306,7 +351,7 @@ export function RoofReviewMap({
       });
     });
 
-    if (solarInsights?.boundingBox) {
+    if (!hasBounds && solarInsights?.boundingBox) {
       bounds.extend({
         lat: solarInsights.boundingBox.sw.latitude,
         lng: solarInsights.boundingBox.sw.longitude,
@@ -316,7 +361,7 @@ export function RoofReviewMap({
         lng: solarInsights.boundingBox.ne.longitude,
       });
       hasBounds = true;
-    } else if (solarInsights?.center) {
+    } else if (!hasBounds && solarInsights?.center) {
       bounds.extend({
         lat: solarInsights.center.latitude,
         lng: solarInsights.center.longitude,
@@ -340,8 +385,7 @@ export function RoofReviewMap({
     }
 
     google.maps.event.trigger(map, "resize");
-    map.setCenter(initialCenter);
-  }, [initialCenter]);
+  }, []);
 
   useEffect(() => {
     if (!isImmersive || !isLoaded) {

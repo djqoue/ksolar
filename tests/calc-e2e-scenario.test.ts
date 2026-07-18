@@ -23,9 +23,10 @@ describe("calculateQuoteScenario", () => {
     expect(result.roofFitSystemWp).toBe(18850);
     expect(result.roofPotentialAnnualGenerationKWh).toBeGreaterThan(result.annualGenerationKWh);
     expect(result.quotedSystemSizeWp).toBe(10400);
-    expect(result.bom?.hardwareCostTHB).toBe(67316);
+    expect(result.bom?.hardwareCostTHB).toBe(68404);
     expect(result.annualGenerationKWh).toBeGreaterThan(12000);
-    expect(result.finance.financeAdjustedPriceTHB).toBeLessThan(result.suggestedSellPriceTHB);
+    expect(result.finance.financeAdjustedPriceTHB).toBe(result.suggestedSellPriceTHB);
+    expect(result.finance.taxBenefitConfirmed).toBe(false);
     expect(result.explanation).toHaveLength(4);
   });
 
@@ -102,7 +103,7 @@ describe("calculateQuoteScenario", () => {
     expect(result.generationSpecificYieldKWhPerKWp).toBeCloseTo(1307.69, 2);
   });
 
-  it("keeps BOM tiering but recalculates the real kWp from the selected panel spec", () => {
+  it("recalculates module count and installed kWp from the selected panel spec", () => {
     const result = calculateQuoteScenario({
       map: {
         ...createEmptyMapSelection(),
@@ -122,9 +123,11 @@ describe("calculateQuoteScenario", () => {
     expect(result.recommendedTier?.id).toBe("10kW");
     expect(result.roofFitPanelCount).toBe(32);
     expect(result.roofFitSystemWp).toBe(17600);
-    expect(result.quotedSystemSizeWp).toBe(8800);
-    expect(result.annualGenerationKWh).toBeGreaterThan(10900);
-    expect(result.annualGenerationKWh).toBeLessThan(11000);
+    expect(result.recommendedTier?.panelCount).toBe(19);
+    expect(result.quotedSystemSizeWp).toBe(10450);
+    expect(result.bom?.lineItems.find((item) => item.id === "pv-module")?.quantity).toBe(19);
+    expect(result.annualGenerationKWh).toBeGreaterThan(12900);
+    expect(result.annualGenerationKWh).toBeLessThan(13050);
   });
 
   it("allows sales to quote a smaller tier than the roof maximum", () => {
@@ -161,5 +164,101 @@ describe("calculateQuoteScenario", () => {
     expect(selectedResult.quotedSystemSizeWp).toBeLessThan(maxResult.quotedSystemSizeWp);
     expect(selectedResult.suggestedSellPriceTHB).toBeLessThan(maxResult.suggestedSellPriceTHB);
     expect(selectedResult.paybackYears).not.toBe(maxResult.paybackYears);
+  });
+
+  it("keeps an unavailable explicit 1P package from silently falling back", () => {
+    const result = calculateQuoteScenario({
+      map: {
+        ...createEmptyMapSelection(),
+        grossAreaM2: 300,
+        usableAreaM2: 210,
+      },
+      topology: { phase: "1P", mode: "ongrid", batteryMode: "none" },
+      pricingPresetId: "standard",
+      capacityIntent: { mode: "standard", targetKW: 15 },
+      selectedFinanceIds: [],
+      ftRateTHBPerKWh: 0.1623,
+      selfConsumptionRatio: 0.6,
+      exportRateTHBPerKWh: 2.2,
+    });
+
+    expect(result.isViable).toBe(false);
+    expect(result.quoteReady).toBe(false);
+    expect(result.recommendedTier).toBeNull();
+    expect(result.warnings.join(" ")).toContain("not a grid-export limit");
+  });
+
+  it("returns roof maximum as technical potential without inventing a package quote", () => {
+    const result = calculateQuoteScenario({
+      map: {
+        ...createEmptyMapSelection(),
+        grossAreaM2: 1_200,
+        usableAreaM2: 840,
+      },
+      topology: { phase: "3P", mode: "ongrid", batteryMode: "none" },
+      pricingPresetId: "standard",
+      capacityIntent: { mode: "roof-potential" },
+      selectedFinanceIds: [],
+      ftRateTHBPerKWh: 0.1623,
+      selfConsumptionRatio: 0.6,
+      exportRateTHBPerKWh: 2.2,
+    });
+
+    expect(result.isViable).toBe(true);
+    expect(result.quoteReady).toBe(false);
+    expect(result.quoteReadiness).toBe("engineering-review");
+    expect(result.engineeringReviewRequired).toBe(true);
+    expect(result.roofFitSystemWp).toBeGreaterThan(20_000);
+    expect(result.annualGenerationKWh).toBe(result.roofPotentialAnnualGenerationKWh);
+    expect(result.suggestedSellPriceTHB).toBe(0);
+    expect(result.bom).toBeNull();
+  });
+
+  it("falls back when a hand-selected inverter is electrically incompatible", () => {
+    const result = calculateQuoteScenario({
+      map: {
+        ...createEmptyMapSelection(),
+        grossAreaM2: 180,
+        usableAreaM2: 126,
+      },
+      topology: { phase: "1P", mode: "ongrid", batteryMode: "none" },
+      pricingPresetId: "standard",
+      capacityIntent: { mode: "standard", targetKW: 10 },
+      selectedInverterId: "growatt-sun-5k-g05p1-eu",
+      selectedFinanceIds: [],
+      ftRateTHBPerKWh: 0.1623,
+      selfConsumptionRatio: 0.6,
+      exportRateTHBPerKWh: 2.2,
+    });
+
+    expect(result.isViable).toBe(true);
+    expect(result.electricalCompatibility?.inverterId).toBe(
+      "growatt-sun-10k-g02p1-eu",
+    );
+    expect(result.warnings.join(" ")).toContain("Automatic BOM selection");
+  });
+
+  it("carries bill and export approval constraints through the quote result", () => {
+    const result = calculateQuoteScenario({
+      map: {
+        ...createEmptyMapSelection(),
+        grossAreaM2: 180,
+        usableAreaM2: 126,
+      },
+      topology: { phase: "1P", mode: "ongrid", batteryMode: "none" },
+      pricingPresetId: "standard",
+      capacityIntent: { mode: "standard", targetKW: 10 },
+      selectedFinanceIds: [],
+      ftRateTHBPerKWh: 0.1623,
+      selfConsumptionRatio: 0.6,
+      exportRateTHBPerKWh: 2.2,
+      monthlyElectricityBillTHB: 1_000,
+      gridExportApproved: false,
+    });
+
+    expect(result.annualExportKWh).toBe(0);
+    expect(result.annualCurtailmentKWh).toBeGreaterThan(0);
+    expect(result.annualSelfUseSavingsTHB).toBe(12_000);
+    expect(result.savingsCappedByBill).toBe(true);
   });
 });

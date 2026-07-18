@@ -7,23 +7,20 @@ import type { QuoteScenarioInput } from "@/types/quote";
 describe("selection guards", () => {
   it("keeps one loan or installment while preserving multiple incentives", () => {
     const conflictingIds = [
-      "comsys-0-percent-6m",
-      "bangkok-bank-poonphol-green-pea",
+      "gsb-solar-for-life-clean-7y",
+      "kbank-sme-solar-5y",
       "personal-income-tax-deduction",
-      "unconfirmed-direct-subsidy-placeholder",
     ];
 
     expect(normalizeFinanceProductIds(conflictingIds)).toEqual([
-      "bangkok-bank-poonphol-green-pea",
+      "gsb-solar-for-life-clean-7y",
       "personal-income-tax-deduction",
-      "unconfirmed-direct-subsidy-placeholder",
     ]);
 
     const guarded = calculateFinanceSelection(250000, conflictingIds);
     const canonical = calculateFinanceSelection(250000, [
-      "bangkok-bank-poonphol-green-pea",
+      "gsb-solar-for-life-clean-7y",
       "personal-income-tax-deduction",
-      "unconfirmed-direct-subsidy-placeholder",
     ]);
 
     expect(guarded.appliedProducts.map((product) => product.id)).toEqual(

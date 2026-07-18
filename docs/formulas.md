@@ -1,172 +1,131 @@
-# KSolar Calculation Formulas
+# KSolar Calculation Reference
 
-## Source of truth
+Runtime source of truth: `lib/calc/*` and `lib/config/*`. Policy baseline: **Thailand, verified 2026-07-18**.
 
-- Runtime logic does not read Excel.
-- All defaults and price references live in code under `lib/config/*`.
-- The selected panel spec is now a first-class calculation input:
-  - `panelPowerWp = selectedPanel.peakPowerW`
-  - `panelAreaM2 = selectedPanel.dimLong * selectedPanel.dimShort / 1_000_000`
-- If no panel is selected, the engine falls back to `SOLAR_DEFAULTS`.
+## 1. Roof evidence and capacity intent
 
-## 1. Roof potential
+The selected panel drives every downstream capacity value:
 
-Roof potential is the engineering ceiling before package and electrical constraints.
+- `panelAreaM2 = dimLongMm * dimShortMm / 1,000,000`
+- `panelPowerWp = selectedPanel.peakPowerW`
+- manual `usableAreaM2 = suppliedUsableAreaM2 || grossAreaM2 * usableAreaFactor`
+- manual `roofFitPanelCount = floor(usableAreaM2 / panelAreaM2)`
+- `roofFitSystemWp = roofFitPanelCount * panelPowerWp`
 
-- `usableAreaM2 = map.usableAreaM2 || grossAreaM2 * usableAreaFactor`
-- `roofFitPanelCount = floor(usableAreaM2 / selectedPanelAreaM2)`
-- `roofFitSystemWp = roofFitPanelCount * selectedPanelPowerWp`
+The default manual usable-area factor is 70%. This area division is a screening estimate; it does not model exact roof edges, setbacks, access paths, or obstacles.
 
-If Google Solar is matched to the drawn roof, the roof-fit stage is overridden by Google-aligned values:
+Google never replaces the formal panel count with an area-normalized module count. When one returned building is quote-eligible—HIGH or MEDIUM imagery, building center inside the selection, at least 80% of Google panel footprints fully contained, selected/Google roof-area agreement of at least 65%, and exactly one selected roof—it may calibrate the annual specific yield. Its selection-scoped module normalization remains a labelled upper-bound reference. BASE, UNKNOWN, multi-roof, and failed-match results remain reference-only.
 
-- `roofFitPanelCount = googleSellablePanelCount`
-- `roofFitSystemWp = googleSellableFitWp`
+### Standard packages
 
-## 2. Standard package selection
+Customer-facing targets are 5, 10, 15, and 20 kW:
 
-The quote does not directly use the roof-fit number as the sellable package. It first maps the roof-fit panel count into a standard BOM family.
+- `requiredPanelCount = ceil(targetKW * 1,000 / panelPowerWp)`
+- `quotedSystemSizeWp = requiredPanelCount * panelPowerWp`
 
-- `1P` allowed families: `3kW`, `5kW`, `10kW`
-- `3P` allowed families: `5kW`, `10kW`, `15kW`, `20kW`
-- `recommendedTier = largest allowed tier where tier.panelCount <= roofFitPanelCount`
+The installed DC value can be slightly above the target because partial modules are impossible. One phase allows 5/10 kW; three phase allows 5/10/15/20 kW. An unavailable explicit choice is disabled with a reason; it is not silently changed to another package. The legacy 3 kW tier is read only for old saved quotes.
 
-If no tier fits, the roof is flagged as not viable.
+### Roof maximum
 
-Important distinction:
+- `potentialPanelCount = roofFitPanelCount`
+- `potentialSystemWp = potentialPanelCount * panelPowerWp`
 
-- `recommendedTier.id` is the BOM family label.
-- `quotedSystemSizeWp = recommendedTier.panelCount * selectedPanelPowerWp`
+Roof maximum is an uncapped technical assessment. It returns `quoteReady = false`, produces no committed BOM or price, and cannot be persisted as a formal quote. Capacity above the largest committed phase package requires engineering review of phase, inverter architecture, protection, structure, and interconnection.
 
-This means the same `10kW` family can become `8.8 kWp`, `9.6 kWp`, or `10.4 kWp` depending on the selected module wattage.
+## 2. Electrical compatibility
+
+A standard quote must resolve an inverter that matches phase and operating mode and passes:
+
+- supported DC/AC ratio: `0.75 <= arrayDcWp / inverterAcWp <= 1.35`
+- preferred DC/AC range: 0.90–1.25; values outside this range generate a warning
+- string Vmp within the inverter MPPT voltage window
+- cold string Voc below maximum inverter input voltage, using a 1.05 safety factor
+- MPPT count and maximum string-input count
+
+Automatic selection chooses the lowest-cost compatible catalog inverter, then the option closest to a 1.05 DC/AC ratio. If none passes, the quote is not viable.
 
 ## 3. Generation
 
-There are two generation outputs:
+Manual/default model:
 
-- Roof potential generation:
-  - `roofPotentialAnnualGenerationKWh = calculateGeneration(roofFitSystemWp)`
-  - or Google-re-scaled annual yield when a matched Google roof is available
-- Quoted package generation:
-  - `quotedAnnualGenerationKWh = calculateGeneration(quotedSystemSizeWp)`
-
-Generation formula:
-
-- `dailyGenerationKWh = (systemSizeWp / 1000) * sunlightHours * (1 - systemLossRatio)`
+- `dailyGenerationKWh = systemSizeKWp * 4.0 * (1 - 0.15)`
 - `annualGenerationKWh = dailyGenerationKWh * 365`
 
-Current defaults:
+For a quote-eligible single-building Google match, KSolar derives a roof-specific Google DC yield from fully contained reference panels and applies it to the quoted KSolar capacity:
 
-- `sunlightHours = 4.0`
-- `systemLossRatio = 0.15`
+- `googleSpecificYieldDc = containedGooglePanelAnnualDcKWh / containedGooglePanelKWp`
+- `annualGenerationKWh = quotedKWp * googleSpecificYieldDc * (1 - 0.15)`
 
-## 4. Tariff and net-billing
+This remains a sales estimate. It is not an AC simulation with equipment clipping, temperature series, soiling schedule, or guaranteed performance.
 
-- `retailRateTHBPerKWh = 4.18 + FT`
-- `annualSelfUseKWh = annualGenerationKWh * selfConsumptionRatio`
-- `annualExportKWh = annualGenerationKWh - annualSelfUseKWh`
-- `annualSavingsTHB = annualSelfUseKWh * retailRateTHBPerKWh + annualExportKWh * exportRateTHBPerKWh`
+## 4. Thailand tariff and export value
 
-## 5. Google Solar normalization
+Current policy inputs:
 
-Google Solar is used as the spatial engine, but it does not use KSolar sellable modules by default.
+- base retail-rate assumption: 4.18 THB/kWh
+- Ft: 0.1623 THB/kWh, valid 2026-05-01 through 2026-08-31
+- residential net-billing export rate: 2.20 THB/kWh
+- published residential approved-export limit used by the model: 5 kW AC
 
-Raw Google layout:
+Formulas:
 
-- `googleRawKw = googlePanelsCount * googlePanelCapacityWatts / 1000`
+- `retailRate = max(0, 4.18 + Ft)`
+- `selfUseKWh = annualGenerationKWh * selfConsumptionRatio`
+- `surplusKWh = annualGenerationKWh - selfUseKWh`
+- if export is not approved: `exportKWh = 0`
+- if approved: `exportKWh = min(surplusKWh, approvedExportLimitKWac * 4.0 * 365)`
+- `curtailmentKWh = surplusKWh - exportKWh`
+- `selfUseSavings = min(selfUseKWh * retailRate, monthlyBillTHB * 12)` when a bill is provided
+- `exportRevenue = exportKWh * exportRate`
+- `annualSavings = selfUseSavings + exportRevenue`
 
-Same-layout normalization:
+The annual export cap is an energy proxy, not an interval power-flow simulation. The 5 kW AC approval limit is not used as a DC package-size limit. Old saved inputs with no approval field retain a legacy assumed-export mode; the current UI defaults to not approved.
 
-- `googleLayoutAreaM2 = googlePanelsCount * googlePanelHeightMeters * googlePanelWidthMeters`
-- `normalizedEquivalentPanelCount = floor(googleLayoutAreaM2 / selectedPanelAreaM2)`
-- `normalizedEquivalentKw = normalizedEquivalentPanelCount * selectedPanelPowerWp / 1000`
+## 5. BOM and price
 
-Roof-wide sellable fit:
+The selected package panel count is the BOM panel quantity. Mounting quantities are derived from panel dimensions, balanced row counts, and the validated string count; catalog panel, inverter, and battery models supply unit costs.
 
-- `sellableFitPanelCount = floor(googleMaxArrayAreaMeters2 / selectedPanelAreaM2)`
-- `sellableFitKw = sellableFitPanelCount * selectedPanelPowerWp / 1000`
+- `hardwareCostTHB = sum(quantity * unitCostTHB)`
+- `marginPrice = round(hardwareCostTHB * (1 + presetMargin))`
+- `benchmarkPrice = selected percentile of the matching market range`
+- `suggestedSellPrice = max(marginPrice, benchmarkPrice)`
 
-Google annual yield re-scaling:
+The BOM is a quotation BOM, not an issued-for-construction design. Cable routing, roof-specific anchors, protection coordination, structural reinforcement, and utility work require site engineering.
 
-- `googleSellableAnnualGenerationKWh = googleYearlyEnergyDcKwh * (sellableFitKw / googleRawKw)`
+## 6. Finance and tax
 
-## 6. Google data layers
+Only one loan/installment product may be selected; tax support remains independently selectable.
 
-Google `buildingInsights` is not enough on its own for contractor-grade review. The app also supports `dataLayers`:
+### Residential tax deduction
 
-- building mask
-- annual flux
-- monthly flux
-- hourly shade
+The published residential Solar Rooftop policy is a taxable-income deduction of up to 200,000 THB, valid 2026-03-03 through 2028-12-31. It is not a 200,000 THB cash rebate.
 
-For raster analysis, KSolar does not use the full Google building mask blindly. It computes:
+- `taxDeductionBase = min(suggestedSellPrice, 200,000)`
+- `taxBenefit = ThaiPIT(taxableIncome) - ThaiPIT(taxableIncome - taxDeductionBase)`
 
-- `effectiveMask = buildingMask ∩ userDrawnRoofPolygon`
+KSolar applies no tax benefit until taxable income or an explicit marginal rate is supplied.
 
-All annual flux, monthly flux, and shade summaries are computed only on this clipped mask so the review map follows the user's selected roof rather than the full detected building.
+### Published loan scenarios
 
-## 7. BOM and pricing
+- GSB Solar for Life clean loan: 84 months, 80% LTV, maximum 500,000 THB; 3.50% for months 1–24, 5.00% for months 25–60, then the configured floating GSB MRR reference (6.045% as of 2026-03-02).
+- KBank SME Solar Rooftop: up to 100% LTV in the model; 60 months at floating MLR−1.00% (5.52% with the 2026-03-02 reference), or 96 months at floating MLR−0.80% (5.72% with the same reference).
 
-- BOM templates come from `lib/config/bom-catalog.ts`
-- Equipment catalogs come from:
-  - `lib/config/panel-catalog.ts`
-  - `lib/config/inverter-catalog.ts`
-  - `lib/config/battery-catalog.ts`
+At each rate change, the monthly annuity is recalculated on the remaining principal and remaining term. Approval, current reference rate, collateral, insurance, and fees remain provider decisions.
 
-Override rule:
+## 7. Project returns
 
-- BOM quantity still comes from the selected tier template.
-- Panel / inverter / battery model and unit cost can be overridden by catalog selection.
+- initial cash flow: `-financeAdjustedPriceTHB`
+- project life: 25 years
+- annual generation degradation: 0.5%
+- tariff escalation: 2.0%
+- annual O&M: 1.0% of adjusted upfront cost
+- default discount rate: 7.0%
+- yearly net cash flow: `year1Savings * degradationFactor * tariffFactor - annualOM - optionalReplacementCost`
 
-Pricing:
+The engine reports simple payback, discounted payback, IRR, NPV, and lifetime net savings from the annual cash-flow series. These are unlevered project-return estimates: loan payments, interest, and fees are shown as affordability outputs but are not included in project IRR/NPV.
 
-- `hardwareCostTHB = sum(all BOM line items)`
-- `marginPriceTHB = hardwareCostTHB * (1 + pricingPreset.marginRatio)`
-- `benchmarkAnchoredPriceTHB = interpolated from market benchmark range`
-- `suggestedSellPriceTHB = max(marginPriceTHB, benchmarkAnchoredPriceTHB)`
+## 8. Policy inclusions and exclusions
 
-## 8. Finance and ROI
+`lib/config/thailand-energy-policy.ts` also records 7% VAT through 2026-09-30, the PEA 2,000 THB pre-VAT grid-inspection fee, the ten-year net-billing contract reference, and official source URLs. VAT and the inspection fee are **not automatically added** by the current quotation formula.
 
-- `cashPriceAfterSubsidyTHB = suggestedSellPriceTHB - directSubsidyTHB`
-- Thailand residential solar tax support is modelled as an income-tax deduction, not an immediate cash discount.
-- `taxDeductionBaseTHB = min(suggestedSellPriceTHB, 200,000)`
-- `estimatedTaxBenefitTHB = taxDeductionBaseTHB * assumedMarginalTaxRate`
-- Current default assumed marginal tax rate: `20%`
-- `financeAdjustedPriceTHB = cashPriceAfterSubsidyTHB - estimatedTaxBenefitTHB`
-- `financedPrincipalTHB = cashPriceAfterSubsidyTHB * loanToValueRatio`
-- `downPaymentTHB = cashPriceAfterSubsidyTHB - financedPrincipalTHB`
-- `monthlyPaymentTHB = amortized payment on financedPrincipalTHB`
-- Loans and installments affect affordability outputs, not the base project IRR logic.
-- `paybackYears = financeAdjustedPriceTHB / annualSavingsTHB`
-
-Monthly customer-facing view:
-
-- `monthlySelfUseSavingsTHB = annualSelfUseSavingsTHB / 12`
-- `monthlyExportRevenueTHB = annualExportRevenueTHB / 12`
-- `monthlyBenefitTHB = monthlySelfUseSavingsTHB + monthlyExportRevenueTHB`
-- `netMonthlyCashflowTHB = monthlyBenefitTHB - monthlyPaymentTHB`
-
-Important sales note:
-
-- `0 THB down payment` must never be promised as guaranteed.
-- Bangkok Bank residential green financing is modelled as up to 100% of project purpose, but final lending depends on collateral valuation, fees, floating rate, credit approval, and bank conditions.
-- Krungsri SME Solar Rooftop is not a default residential product; it is only a business customer reference.
-
-IRR assumptions:
-
-- `projectLifeYears = 25`
-- `degradationRatio = 0.5%`
-- `tariffEscalationRatio = 2%`
-- `annualOMRatio = 1%`
-
-## 9. Explanation chain shown in UI
-
-The UI breakdown intentionally exposes intermediate values so sales and ops can audit the result:
-
-- selected panel footprint and wattage
-- gross area and usable area
-- roof-fit supported panel count
-- roof-fit kWp
-- quoted package panel count and quoted kWp
-- annual generation and savings
-- BOM category totals
-- finance adjustments and ROI
+Before production use after any validity date, update the policy source, verification date, affected tests, and customer-facing disclosure. Final tax eligibility, bank approval, grid connection, export permission, and engineering acceptance are outside the calculator's authority.

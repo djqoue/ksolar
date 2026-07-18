@@ -19,6 +19,7 @@ interface GoogleBuildingInsightsResponse {
     ne?: { latitude?: number; longitude?: number };
   };
   imageryDate?: { year?: number; month?: number; day?: number };
+  imageryProcessedDate?: { year?: number; month?: number; day?: number };
   postalCode?: string;
   regionCode?: string;
   imageryQuality?: "HIGH" | "MEDIUM" | "BASE";
@@ -33,10 +34,17 @@ interface GoogleBuildingInsightsResponse {
     wholeRoofStats?: {
       areaMeters2?: number;
       groundAreaMeters2?: number;
+      sunshineQuantiles?: number[];
+    };
+    buildingStats?: {
+      areaMeters2?: number;
+      groundAreaMeters2?: number;
+      sunshineQuantiles?: number[];
     };
     roofSegmentStats?: Array<{
       pitchDegrees?: number;
       azimuthDegrees?: number;
+      planeHeightAtCenterMeters?: number;
       center?: { latitude?: number; longitude?: number };
       boundingBox?: {
         sw?: { latitude?: number; longitude?: number };
@@ -67,6 +75,8 @@ interface GoogleBuildingInsightsResponse {
     }>;
     financialAnalyses?: Array<{
       monthlyBill?: MoneyLike;
+      defaultBill?: boolean;
+      averageKwhPerMonth?: number;
       panelConfigIndex?: number;
       financialDetails?: {
         initialAcKwhPerYear?: number;
@@ -137,6 +147,8 @@ function normalizeBuildingInsightsResponse(
       index,
       panelConfigIndex:
         analysis.panelConfigIndex !== undefined ? analysis.panelConfigIndex : null,
+      defaultBill: analysis.defaultBill === true,
+      averageKwhPerMonth: analysis.averageKwhPerMonth ?? null,
       monthlyBillAmount: toMoneyAmount(analysis.monthlyBill),
       monthlyBillCurrencyCode: analysis.monthlyBill?.currencyCode,
       yearlyAcKwh: analysis.financialDetails?.initialAcKwhPerYear ?? null,
@@ -155,6 +167,7 @@ function normalizeBuildingInsightsResponse(
   const maxConfig = availableConfigs.length > 0 ? availableConfigs[availableConfigs.length - 1] : undefined;
   const billMatchedAnalysis = financialAnalyses.find(
     (analysis) =>
+      analysis.defaultBill &&
       analysis.panelConfigIndex !== null &&
       analysis.panelConfigIndex >= 0 &&
       analysis.panelConfigIndex < availableConfigs.length,
@@ -185,8 +198,9 @@ function normalizeBuildingInsightsResponse(
             },
           }
         : undefined,
-    imageryQuality: payload.imageryQuality || "BASE",
+    imageryQuality: payload.imageryQuality || "UNKNOWN",
     imageryDate: formatGoogleDate(payload.imageryDate),
+    imageryProcessedDate: formatGoogleDate(payload.imageryProcessedDate),
     regionCode: payload.regionCode,
     postalCode: payload.postalCode,
     maxArrayPanelsCount: payload.solarPotential.maxArrayPanelsCount || 0,
@@ -198,6 +212,13 @@ function normalizeBuildingInsightsResponse(
     panelWidthMeters: payload.solarPotential.panelWidthMeters || 0,
     roofAreaMeters2: payload.solarPotential.wholeRoofStats?.areaMeters2,
     roofGroundAreaMeters2: payload.solarPotential.wholeRoofStats?.groundAreaMeters2,
+    wholeRoofSunshineQuantiles:
+      payload.solarPotential.wholeRoofStats?.sunshineQuantiles,
+    buildingRoofAreaMeters2: payload.solarPotential.buildingStats?.areaMeters2,
+    buildingGroundAreaMeters2:
+      payload.solarPotential.buildingStats?.groundAreaMeters2,
+    buildingSunshineQuantiles:
+      payload.solarPotential.buildingStats?.sunshineQuantiles,
     availableConfigs,
     maxConfig,
     billMatchedConfig,
@@ -235,6 +256,8 @@ function normalizeBuildingInsightsResponse(
                 },
               }
             : undefined,
+        planeHeightAtCenterMeters: segment.planeHeightAtCenterMeters,
+        sunshineQuantiles: segment.stats?.sunshineQuantiles,
         sunshineP90: segment.stats?.sunshineQuantiles?.[9],
       })) || [],
     solarPanels:
@@ -279,7 +302,9 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const latitudeParam = searchParams.get("latitude");
   const longitudeParam = searchParams.get("longitude");
-  const requiredQuality = searchParams.get("requiredQuality") || "MEDIUM";
+  const requiredQuality = searchParams.get("requiredQuality") || "BASE";
+  const exactQualityRequiredParam = searchParams.get("exactQualityRequired");
+  const exactQualityRequired = exactQualityRequiredParam === "true";
 
   if (!latitudeParam?.trim() || !longitudeParam?.trim()) {
     return NextResponse.json(
@@ -298,7 +323,10 @@ export async function GET(request: NextRequest) {
     latitude > 90 ||
     longitude < -180 ||
     longitude > 180 ||
-    !["HIGH", "MEDIUM", "BASE"].includes(requiredQuality)
+    !["HIGH", "MEDIUM", "BASE"].includes(requiredQuality) ||
+    (exactQualityRequiredParam !== null &&
+      exactQualityRequiredParam !== "true" &&
+      exactQualityRequiredParam !== "false")
   ) {
     return NextResponse.json(
       { error: "Valid latitude, longitude, and imagery quality are required." },
@@ -306,43 +334,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const qualityCandidates =
-    requiredQuality === "BASE" ? ["BASE"] : [requiredQuality, "BASE"];
+  const url = new URL("https://solar.googleapis.com/v1/buildingInsights:findClosest");
+  url.searchParams.set("location.latitude", String(latitude));
+  url.searchParams.set("location.longitude", String(longitude));
+  url.searchParams.set("requiredQuality", requiredQuality);
+  url.searchParams.set("exactQualityRequired", String(exactQualityRequired));
+  url.searchParams.set("key", apiKey);
 
-  let response: Response | null = null;
-  let payload: GoogleBuildingInsightsResponse | null = null;
+  const response = await fetch(url.toString(), {
+    headers: {
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
 
-  for (const candidateQuality of qualityCandidates) {
-    const url = new URL("https://solar.googleapis.com/v1/buildingInsights:findClosest");
-    url.searchParams.set("location.latitude", String(latitude));
-    url.searchParams.set("location.longitude", String(longitude));
-    url.searchParams.set("requiredQuality", candidateQuality);
-    url.searchParams.set("key", apiKey);
-
-    response = await fetch(url.toString(), {
-      headers: {
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
-
-    payload = (await response.json()) as GoogleBuildingInsightsResponse;
-
-    if (response.ok) {
-      break;
-    }
-
-    if (response.status !== 404 || candidateQuality === "BASE") {
-      break;
-    }
-  }
-
-  if (!response || !payload) {
-    return NextResponse.json(
-      { error: "Google Solar API request did not return a response." },
-      { status: 502 },
-    );
-  }
+  const payload = (await response.json()) as GoogleBuildingInsightsResponse;
 
   if (!response.ok) {
     const apiError = buildGoogleApiErrorPayload({

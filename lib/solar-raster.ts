@@ -18,14 +18,18 @@ import type {
 
 type NumericRaster = ArrayLike<number>;
 
-interface RasterStack {
+export interface RasterStack {
   bands: NumericRaster[];
   bounds: SolarRasterBounds;
   width: number;
   height: number;
+  noDataValues: Array<number | null>;
 }
 
 const rasterCache = new Map<string, Promise<RasterStack>>();
+const MAX_RASTER_CACHE_ENTRIES = 24;
+const GOOGLE_SOLAR_NODATA = -9999;
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -40,16 +44,15 @@ function getFluxColor(normalized: number) {
   return { r, g, b };
 }
 
-function normalizeShadeValue(value: number, maxValue: number) {
-  if (maxValue <= 1) {
-    return clamp(value, 0, 1);
-  }
-
-  if (maxValue <= 100) {
-    return clamp(value / 100, 0, 1);
-  }
-
-  return clamp(value / 255, 0, 1);
+export function isValidSolarRasterValue(
+  value: number,
+  noDataValue: number | null = null,
+) {
+  return (
+    Number.isFinite(value) &&
+    value !== GOOGLE_SOLAR_NODATA &&
+    (noDataValue === null || value !== noDataValue)
+  );
 }
 
 function isPointInsidePath(
@@ -82,55 +85,102 @@ function isPointInsidePath(
   return inside;
 }
 
-function buildEffectiveMask(
-  rawMaskBand: NumericRaster,
-  width: number,
-  height: number,
-  bounds: SolarRasterBounds,
-  selectionShapes: RoofShape[],
+function getPixelCenter(
+  raster: Pick<RasterStack, "bounds" | "width" | "height">,
+  row: number,
+  column: number,
 ) {
-  const effectiveMask = new Uint8Array(rawMaskBand.length);
-  const geospatialShapes = selectionShapes.filter((shape) => shape.path.length > 0);
-  const hasSelection = geospatialShapes.length > 0;
-  const latSpan = bounds.north - bounds.south;
-  const lngSpan = bounds.east - bounds.west;
+  const latSpan = raster.bounds.north - raster.bounds.south;
+  const lngSpan = raster.bounds.east - raster.bounds.west;
 
-  for (let row = 0; row < height; row += 1) {
-    for (let column = 0; column < width; column += 1) {
-      const index = row * width + column;
-      const inBuildingMask = Number(rawMaskBand[index]) > 0;
-
-      if (!inBuildingMask) {
-        effectiveMask[index] = 0;
-        continue;
-      }
-
-      if (!hasSelection) {
-        effectiveMask[index] = 1;
-        continue;
-      }
-
-      const latitude = bounds.north - ((row + 0.5) / height) * latSpan;
-      const longitude = bounds.west + ((column + 0.5) / width) * lngSpan;
-      const inSelection = geospatialShapes.some((shape) =>
-        isPointInsidePath(latitude, longitude, shape.path),
-      );
-
-      effectiveMask[index] = inSelection ? 1 : 0;
-    }
-  }
-
-  return effectiveMask;
+  return {
+    latitude: raster.bounds.north - ((row + 0.5) / raster.height) * latSpan,
+    longitude: raster.bounds.west + ((column + 0.5) / raster.width) * lngSpan,
+  };
 }
 
-function maskHasPixels(maskBand: NumericRaster) {
-  for (let index = 0; index < maskBand.length; index += 1) {
-    if (Number(maskBand[index]) > 0) {
-      return true;
+function getRasterIndexAtPoint(
+  raster: Pick<RasterStack, "bounds" | "width" | "height">,
+  point: { latitude: number; longitude: number },
+) {
+  const latSpan = raster.bounds.north - raster.bounds.south;
+  const lngSpan = raster.bounds.east - raster.bounds.west;
+  if (latSpan <= 0 || lngSpan <= 0) {
+    return null;
+  }
+
+  if (
+    point.latitude > raster.bounds.north ||
+    point.latitude < raster.bounds.south ||
+    point.longitude < raster.bounds.west ||
+    point.longitude > raster.bounds.east
+  ) {
+    return null;
+  }
+
+  const row = Math.floor(
+    ((raster.bounds.north - point.latitude) / latSpan) * raster.height,
+  );
+  const column = Math.floor(
+    ((point.longitude - raster.bounds.west) / lngSpan) * raster.width,
+  );
+
+  if (row < 0 || row >= raster.height || column < 0 || column >= raster.width) {
+    return null;
+  }
+
+  return row * raster.width + column;
+}
+
+export function buildAlignedEffectiveMask(
+  target: Pick<RasterStack, "bounds" | "width" | "height">,
+  buildingMask: RasterStack,
+  selectionShapes: RoofShape[],
+) {
+  const rawMaskBand = buildingMask.bands[0];
+  if (!rawMaskBand) {
+    return null;
+  }
+
+  const effectiveMask = new Uint8Array(target.width * target.height);
+  const geospatialShapes = selectionShapes.filter((shape) => shape.path.length > 0);
+  const hasSelection = geospatialShapes.length > 0;
+  let includedPixelCount = 0;
+
+  for (let row = 0; row < target.height; row += 1) {
+    for (let column = 0; column < target.width; column += 1) {
+      const index = row * target.width + column;
+      const point = getPixelCenter(target, row, column);
+      const maskIndex = getRasterIndexAtPoint(buildingMask, point);
+      const inBuildingMask =
+        maskIndex !== null && Number(rawMaskBand[maskIndex]) > 0;
+
+      if (!inBuildingMask) {
+        continue;
+      }
+
+      if (
+        hasSelection &&
+        !geospatialShapes.some((shape) =>
+          isPointInsidePath(point.latitude, point.longitude, shape.path),
+        )
+      ) {
+        continue;
+      }
+
+      effectiveMask[index] = 1;
+      includedPixelCount += 1;
     }
   }
 
-  return false;
+  if (includedPixelCount === 0) {
+    return null;
+  }
+
+  return {
+    band: effectiveMask,
+    source: hasSelection ? ("selected-roof" as const) : ("google-building" as const),
+  };
 }
 
 async function fetchRasterStack(url: string): Promise<RasterStack> {
@@ -140,7 +190,7 @@ async function fetchRasterStack(url: string): Promise<RasterStack> {
   }
 
   const promise = (async () => {
-    const response = await fetch(url, { cache: "force-cache" });
+    const response = await fetch(url, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`Failed to fetch raster: ${response.statusText}`);
     }
@@ -153,13 +203,21 @@ async function fetchRasterStack(url: string): Promise<RasterStack> {
     const rawBounds: SolarRasterBounds = { west, south, east, north };
     const projectedCrs = firstImage.getGeoKeys?.()?.ProjectedCSTypeGeoKey;
     const utmCrs = getUtmCrsFromEpsg(projectedCrs);
-    const bounds =
-      looksLikeLatLngBounds(rawBounds) || !utmCrs
-        ? rawBounds
-        : convertUtmBoundsToLatLng(rawBounds, utmCrs);
+    const bounds = looksLikeLatLngBounds(rawBounds)
+      ? rawBounds
+      : utmCrs
+        ? convertUtmBoundsToLatLng(rawBounds, utmCrs)
+        : null;
+    if (!bounds) {
+      throw new Error(
+        `Unsupported Solar GeoTIFF coordinate reference system${projectedCrs ? `: EPSG ${projectedCrs}` : ""}.`,
+      );
+    }
+
     const width = firstImage.getWidth();
     const height = firstImage.getHeight();
     const bands: NumericRaster[] = [];
+    const noDataValues: Array<number | null> = [];
 
     if (imageCount > 1) {
       for (let index = 0; index < imageCount; index += 1) {
@@ -167,14 +225,19 @@ async function fetchRasterStack(url: string): Promise<RasterStack> {
         const rasters = await image.readRasters({ interleave: false });
         if (Array.isArray(rasters) && rasters[0]) {
           bands.push(rasters[0]);
+          noDataValues.push(image.getGDALNoData());
         }
       }
     } else {
       const rasters = await firstImage.readRasters({ interleave: false });
       if (Array.isArray(rasters)) {
         bands.push(...rasters);
+        for (let index = 0; index < rasters.length; index += 1) {
+          noDataValues.push(firstImage.getGDALNoData());
+        }
       } else {
         bands.push(rasters);
+        noDataValues.push(firstImage.getGDALNoData());
       }
     }
 
@@ -183,10 +246,23 @@ async function fetchRasterStack(url: string): Promise<RasterStack> {
       bounds,
       width,
       height,
+      noDataValues,
     };
   })();
 
+  if (rasterCache.size >= MAX_RASTER_CACHE_ENTRIES) {
+    const oldestKey = rasterCache.keys().next().value as string | undefined;
+    if (oldestKey) {
+      rasterCache.delete(oldestKey);
+    }
+  }
+
   rasterCache.set(url, promise);
+  void promise.catch(() => {
+    if (rasterCache.get(url) === promise) {
+      rasterCache.delete(url);
+    }
+  });
   return promise;
 }
 
@@ -197,6 +273,7 @@ function buildAnnualFluxOverlay(
   maskBand: NumericRaster,
   bounds: SolarRasterBounds,
   maskSource: SolarAnnualFluxOverlay["maskSource"],
+  noDataValue: number | null,
 ): SolarAnnualFluxOverlay | null {
   const pixelCount = Math.min(annualFluxBand.length, maskBand.length);
   if (pixelCount === 0) {
@@ -214,7 +291,7 @@ function buildAnnualFluxOverlay(
     }
 
     const value = Number(annualFluxBand[index]);
-    if (!Number.isFinite(value)) {
+    if (!isValidSolarRasterValue(value, noDataValue)) {
       continue;
     }
 
@@ -247,7 +324,13 @@ function buildAnnualFluxOverlay(
       continue;
     }
 
-    const normalized = (Number(annualFluxBand[index]) - minFlux) / fluxRange;
+    const value = Number(annualFluxBand[index]);
+    if (!isValidSolarRasterValue(value, noDataValue)) {
+      imageData.data[dataIndex + 3] = 0;
+      continue;
+    }
+
+    const normalized = (value - minFlux) / fluxRange;
     const color = getFluxColor(normalized);
     imageData.data[dataIndex] = color.r;
     imageData.data[dataIndex + 1] = color.g;
@@ -271,8 +354,9 @@ function buildAnnualFluxOverlay(
 function computeMaskedBandMeans(
   bands: NumericRaster[],
   maskBand: NumericRaster,
-): number[] {
-  return bands.map((band) => {
+  noDataValues: Array<number | null>,
+): number[] | null {
+  const means = bands.map((band, bandIndex) => {
     const pixelCount = Math.min(band.length, maskBand.length);
     let total = 0;
     let count = 0;
@@ -283,7 +367,7 @@ function computeMaskedBandMeans(
       }
 
       const value = Number(band[index]);
-      if (!Number.isFinite(value)) {
+      if (!isValidSolarRasterValue(value, noDataValues[bandIndex] ?? null)) {
         continue;
       }
 
@@ -291,8 +375,10 @@ function computeMaskedBandMeans(
       count += 1;
     }
 
-    return count > 0 ? total / count : 0;
+    return count > 0 ? total / count : null;
   });
+
+  return means.every((value): value is number => value !== null) ? means : null;
 }
 
 async function buildMonthlyFluxSummary(
@@ -309,20 +395,117 @@ async function buildMonthlyFluxSummary(
     return null;
   }
 
-  const effectiveMask = buildEffectiveMask(
-    mask.bands[0],
-    mask.width,
-    mask.height,
-    mask.bounds,
-    selectionShapes,
+  if (monthlyFlux.bands.length < 12) {
+    return null;
+  }
+
+  const alignedMask = buildAlignedEffectiveMask(monthlyFlux, mask, selectionShapes);
+  if (!alignedMask) {
+    return null;
+  }
+
+  const monthlyFluxMeans = computeMaskedBandMeans(
+    monthlyFlux.bands.slice(0, 12),
+    alignedMask.band,
+    monthlyFlux.noDataValues.slice(0, 12),
   );
-  const analysisMask = maskHasPixels(effectiveMask) ? effectiveMask : mask.bands[0];
+  if (!monthlyFluxMeans) {
+    return null;
+  }
 
   return {
-    monthlyFluxMeans: computeMaskedBandMeans(
-      monthlyFlux.bands.slice(0, 12),
-      analysisMask,
-    ),
+    monthlyFluxMeans,
+  };
+}
+
+export function decodeHourlyShadeDay(
+  value: number,
+  dayIndex: number,
+  noDataValue: number | null = null,
+): boolean | null {
+  if (
+    !Number.isInteger(dayIndex) ||
+    dayIndex < 0 ||
+    dayIndex > 30 ||
+    !isValidSolarRasterValue(value, noDataValue) ||
+    value < 0
+  ) {
+    return null;
+  }
+
+  const encoded = Math.trunc(value) >>> 0;
+  if ((encoded & 0x80000000) !== 0) {
+    return null;
+  }
+
+  return (encoded & (1 << dayIndex)) !== 0;
+}
+
+function countSetBits(value: number) {
+  let remaining = value >>> 0;
+  let count = 0;
+
+  while (remaining !== 0) {
+    remaining = (remaining & (remaining - 1)) >>> 0;
+    count += 1;
+  }
+
+  return count;
+}
+
+export function computeHourlySunAccessForMonth(
+  bands: NumericRaster[],
+  maskBand: NumericRaster,
+  daysInMonth: number,
+  noDataValues: Array<number | null> = [],
+) {
+  if (
+    bands.length < 24 ||
+    !Number.isInteger(daysInMonth) ||
+    daysInMonth < 1 ||
+    daysInMonth > 31
+  ) {
+    return null;
+  }
+
+  const validDayMask =
+    daysInMonth === 31 ? 0x7fffffff : ((2 ** daysInMonth - 1) >>> 0);
+  let sunnyObservationCount = 0;
+  let validObservationCount = 0;
+
+  for (let hour = 0; hour < 24; hour += 1) {
+    const band = bands[hour];
+    const pixelCount = Math.min(band.length, maskBand.length);
+    const noDataValue = noDataValues[hour] ?? null;
+
+    for (let index = 0; index < pixelCount; index += 1) {
+      if (Number(maskBand[index]) <= 0) {
+        continue;
+      }
+
+      const value = Number(band[index]);
+      if (!isValidSolarRasterValue(value, noDataValue) || value < 0) {
+        continue;
+      }
+
+      const encoded = Math.trunc(value) >>> 0;
+      if ((encoded & 0x80000000) !== 0) {
+        continue;
+      }
+
+      sunnyObservationCount += countSetBits(encoded & validDayMask);
+      validObservationCount += daysInMonth;
+    }
+  }
+
+  if (validObservationCount === 0) {
+    return null;
+  }
+
+  return {
+    ratio: sunnyObservationCount / validObservationCount,
+    sunnyObservationCount,
+    validObservationCount,
   };
 }
 
@@ -331,7 +514,7 @@ async function buildHourlyShadeSummary(
   maskPath: string,
   selectionShapes: RoofShape[],
 ): Promise<SolarHourlyShadeSummary | null> {
-  if (hourlyShadePaths.length === 0) {
+  if (hourlyShadePaths.length !== 12) {
     return null;
   }
 
@@ -340,41 +523,45 @@ async function buildHourlyShadeSummary(
     return null;
   }
 
-  const effectiveMask = buildEffectiveMask(
-    mask.bands[0],
-    mask.width,
-    mask.height,
-    mask.bounds,
-    selectionShapes,
-  );
-  const analysisMask = maskHasPixels(effectiveMask) ? effectiveMask : mask.bands[0];
-
-  const monthlySunAccessRatio = await Promise.all(
-    hourlyShadePaths.slice(0, 12).map(async (path) => {
+  const monthlyComputations = await Promise.all(
+    hourlyShadePaths.map(async (path, monthIndex) => {
       const hourlyShade = await fetchRasterStack(path);
-      if (hourlyShade.bands.length === 0) {
-        return 0;
+      if (hourlyShade.bands.length < 24) {
+        return null;
       }
 
-      const bandMeans = computeMaskedBandMeans(hourlyShade.bands, analysisMask);
-      const maxValue = Math.max(...bandMeans, 1);
-      const normalized = bandMeans.map((value) => normalizeShadeValue(value, maxValue));
-      const daylightBandMeans = normalized.filter((value) => value > 0);
-
-      if (daylightBandMeans.length === 0) {
-        return 0;
+      const alignedMask = buildAlignedEffectiveMask(hourlyShade, mask, selectionShapes);
+      if (!alignedMask) {
+        return null;
       }
 
-      const strongestHours = [...daylightBandMeans]
-        .sort((left, right) => right - left)
-        .slice(0, Math.min(6, daylightBandMeans.length));
-
-      return strongestHours.reduce((sum, value) => sum + value, 0) / strongestHours.length;
+      return computeHourlySunAccessForMonth(
+        hourlyShade.bands.slice(0, 24),
+        alignedMask.band,
+        DAYS_IN_MONTH[monthIndex],
+        hourlyShade.noDataValues.slice(0, 24),
+      );
     }),
   );
 
+  if (monthlyComputations.some((value) => value === null)) {
+    return null;
+  }
+
+  const validComputations = monthlyComputations.filter(
+    (value): value is NonNullable<typeof value> => value !== null,
+  );
+
   return {
-    monthlySunAccessRatio,
+    monthlySunAccessRatio: validComputations.map((value) => value.ratio),
+    monthlySunnyObservationCount: validComputations.map(
+      (value) => value.sunnyObservationCount,
+    ),
+    monthlyValidObservationCount: validComputations.map(
+      (value) => value.validObservationCount,
+    ),
+    metricDefinition:
+      "fraction-of-valid-selected-roof-pixel-day-hours-with-direct-sun",
   };
 }
 
@@ -382,7 +569,7 @@ export async function buildSolarDataLayerAnalysis(
   dataLayers: GoogleSolarDataLayerPaths,
   selectionShapes: RoofShape[],
 ): Promise<SolarDataLayerAnalysis> {
-  if (!dataLayers.annualFluxPath || !dataLayers.maskPath) {
+  if (!dataLayers.maskPath) {
     return {
       annualFluxOverlay: null,
       monthlyFlux: null,
@@ -390,9 +577,11 @@ export async function buildSolarDataLayerAnalysis(
     };
   }
 
-  const [annualFlux, mask, monthlyFlux, hourlyShade] = await Promise.all([
-    fetchRasterStack(dataLayers.annualFluxPath),
+  const [mask, annualFlux, monthlyFlux, hourlyShade] = await Promise.all([
     fetchRasterStack(dataLayers.maskPath),
+    dataLayers.annualFluxPath
+      ? fetchRasterStack(dataLayers.annualFluxPath)
+      : Promise.resolve(null),
     dataLayers.monthlyFluxPath
       ? buildMonthlyFluxSummary(
           dataLayers.monthlyFluxPath,
@@ -409,26 +598,13 @@ export async function buildSolarDataLayerAnalysis(
       : Promise.resolve(null),
   ]);
 
-  const effectiveMask =
-    mask.bands[0]
-      ? buildEffectiveMask(
-          mask.bands[0],
-          mask.width,
-          mask.height,
-          mask.bounds,
-          selectionShapes,
-        )
-      : null;
-  const overlayMask =
-    effectiveMask && maskHasPixels(effectiveMask)
-      ? { band: effectiveMask, source: "selected-roof" as const }
-      : mask.bands[0]
-        ? { band: mask.bands[0], source: "google-building" as const }
-        : null;
+  const overlayMask = annualFlux
+    ? buildAlignedEffectiveMask(annualFlux, mask, selectionShapes)
+    : null;
 
   return {
     annualFluxOverlay:
-      annualFlux.bands[0] && overlayMask
+      annualFlux?.bands[0] && overlayMask
         ? buildAnnualFluxOverlay(
             annualFlux.width,
             annualFlux.height,
@@ -436,6 +612,7 @@ export async function buildSolarDataLayerAnalysis(
             overlayMask.band,
             annualFlux.bounds,
             overlayMask.source,
+            annualFlux.noDataValues[0] ?? null,
           )
         : null,
     monthlyFlux,

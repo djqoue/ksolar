@@ -8,6 +8,8 @@ export interface SolarLatLngBox {
   ne: SolarLatLng;
 }
 
+export type SolarImageryQuality = "HIGH" | "MEDIUM" | "BASE" | "UNKNOWN";
+
 export interface GoogleSolarPanelConfigSummary {
   index: number;
   panelsCount: number;
@@ -25,6 +27,8 @@ export interface GoogleSolarPanelConfigSummary {
 export interface GoogleSolarFinancialAnalysisSummary {
   index: number;
   panelConfigIndex: number | null;
+  defaultBill: boolean;
+  averageKwhPerMonth: number | null;
   monthlyBillAmount: number | null;
   monthlyBillCurrencyCode?: string;
   yearlyAcKwh?: number | null;
@@ -38,8 +42,9 @@ export interface GoogleSolarSummary {
   buildingId: string;
   center: SolarLatLng;
   boundingBox?: SolarLatLngBox;
-  imageryQuality: "HIGH" | "MEDIUM" | "BASE";
+  imageryQuality: SolarImageryQuality;
   imageryDate?: string;
+  imageryProcessedDate?: string;
   regionCode?: string;
   postalCode?: string;
   maxArrayPanelsCount: number;
@@ -51,6 +56,10 @@ export interface GoogleSolarSummary {
   carbonOffsetFactorKgPerMwh?: number;
   roofAreaMeters2?: number;
   roofGroundAreaMeters2?: number;
+  wholeRoofSunshineQuantiles?: number[];
+  buildingRoofAreaMeters2?: number;
+  buildingGroundAreaMeters2?: number;
+  buildingSunshineQuantiles?: number[];
   availableConfigs: GoogleSolarPanelConfigSummary[];
   maxConfig?: GoogleSolarPanelConfigSummary;
   billMatchedConfig?: GoogleSolarPanelConfigSummary;
@@ -65,6 +74,8 @@ export interface GoogleSolarSummary {
     groundAreaMeters2: number;
     center?: SolarLatLng;
     boundingBox?: SolarLatLngBox;
+    planeHeightAtCenterMeters?: number;
+    sunshineQuantiles?: number[];
     sunshineP90?: number;
   }>;
   solarPanels: Array<{
@@ -78,7 +89,7 @@ export interface GoogleSolarSummary {
 export interface GoogleSolarDataLayerPaths {
   center: SolarLatLng;
   radiusMeters: number;
-  imageryQuality: "HIGH" | "MEDIUM" | "BASE";
+  imageryQuality: SolarImageryQuality;
   imageryDate?: string;
   imageryProcessedDate?: string;
   dsmPath?: string;
@@ -112,6 +123,9 @@ export interface SolarMonthlyFluxSummary {
 
 export interface SolarHourlyShadeSummary {
   monthlySunAccessRatio: number[];
+  monthlySunnyObservationCount: number[];
+  monthlyValidObservationCount: number[];
+  metricDefinition: "fraction-of-valid-selected-roof-pixel-day-hours-with-direct-sun";
 }
 
 export interface SolarDataLayerAnalysis {

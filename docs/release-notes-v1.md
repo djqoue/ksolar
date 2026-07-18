@@ -1,70 +1,54 @@
-# KSolar MVP v1 Field-Test Release Notes
+# KSolar v1 Release Candidate
 
-## Purpose
+Baseline date: **2026-07-18**. This release prepares the Thai rooftop-solar sales flow for production verification at `ksolar.top`.
 
-This release turns KSolar from a calculation prototype into a field-testable sales workflow for Thai residential rooftop solar quotes.
+## Delivered
 
-The product direction is intentionally simple:
+### Workflow and interaction
 
-- The salesperson should see a guided next-step workflow, not a technical control room.
-- Google Solar should provide roof and solar-resource confidence signals.
-- KSolar should remain the source of truth for sellable equipment, BOM, pricing, and Thailand ROI logic.
-- Advanced engineering detail should be visible for review, but not forced onto first-time users.
+- The guided four-step flow keeps the primary action and system status visible and preserves the selected address, map center, and drawn roof when users move back from Step 3.
+- Capacity choice is explicit: 5/10/15/20 kW targets or roof maximum.
+- Unavailable choices are disabled with the phase, roof-fit, or electrical reason instead of silently changing the user's request.
+- Roof maximum is visibly technical-only, has no committed price/BOM, and cannot be saved as a formal quote.
+- Interaction review follows Apple HIG principles for hierarchy, direct manipulation, feedback, context preservation, reversal, and accessible touch targets.
 
-## Major Changes
+### Quote engine
 
-### Sales workflow and UI
+- Selected module wattage and dimensions now drive capacity, generation, layout comparisons, and BOM quantities consistently.
+- Standard targets round up to whole modules; 1P allows 5/10 kW and 3P allows 5/10/15/20 kW.
+- Inverters are validated for phase, mode, DC/AC ratio, MPPT voltage, cold Voc, MPPT count, and string inputs.
+- Panel, mounting, row, and string quantities are derived from the resolved package instead of fixed legacy counts.
+- Quote readiness distinguishes ready, technical-potential-only, engineering-review, and not-viable results.
 
-- Reworked the page into a guided workflow with clearer step progression.
-- Simplified the main quoting path so the most important numbers are easier to find.
-- Updated the visual direction toward a cleaner energy-tech style with stronger hero cards, card hierarchy, and mobile spacing.
-- Added PWA manifest and app icons so the app can be installed more cleanly on mobile devices.
+### Thailand tariff, finance, and returns
 
-### Mobile map usability
+- Central policy baseline records Ft 0.1623 THB/kWh, 2.20 THB/kWh residential export value, a 5 kW AC approved-export reference, 7% VAT validity, grid-inspection reference, and official sources.
+- Self-use savings are capped by the supplied annual electricity bill; export revenue is zero unless approval is selected, with curtailed surplus shown separately.
+- The residential 200,000 THB support is correctly treated as a taxable-income deduction, not a cash rebate. No tax saving is applied without tax information.
+- Published GSB residential and KBank SME 5-year/8-year scenarios use term/rate schedules and provider-specific LTV/loan caps.
+- Returns now include simple and discounted payback, IRR, NPV, and lifetime net savings over a 25-year cash-flow model.
 
-- Fixed mobile layout issues where the map could collapse or become hidden.
-- Increased map presence in the roof-selection and roof-review steps.
-- Simplified drawing controls into the operational tools sales users actually need: rectangle, polygon, pan, undo, and clear.
-- Disabled overlapping Google map controls where they conflicted with KSolar controls.
+### Google Solar precision and safety
 
-### Google Solar integration
+- Google Solar calls use the authenticated server proxy and request the best available quality in one call.
+- HIGH/MEDIUM results must pass strict single-building roof-selection overlap and area checks before they can calibrate annual yield; formal panel count remains on the KSolar roof rule.
+- BASE/UNKNOWN results are reference-only; wrong-roof, partial-match, and stale results cannot silently drive panel count, yield, BOM, or price.
+- Complete panel footprints inside the selected polygon provide a conservative selection-scoped reference.
+- Annual/monthly/hourly rasters now use spatial mask alignment, no-data filtering, and correct hourly day-bit decoding.
+- Solar data is not persisted in browser local storage.
 
-- Uses Google Solar `buildingInsights` for building-level potential, imagery quality, roof segments, sunshine hours, panel configurations, and max array area.
-- Uses Google Solar `dataLayers` and `geoTiff:get` through a server-side proxy so raster data is not fetched directly from the browser.
-- Adds map layer controls for selected roof, Google roof outline, Google panel array, and annual flux heatmap.
-- Converts Google panel center points into approximate rectangular panel footprints for a more intuitive array-design view.
-- Adds raster fallback behavior: if the user-drawn polygon does not overlap Google raster pixels, KSolar can fall back to the Google building mask and clearly treats that as a validation signal, not final CAD.
+## Known boundaries
 
-### Quote sizing and package control
+- Manual roof fit is area-based screening and does not geometrically place modules around edges, setbacks, access paths, or obstacles.
+- Google/KSolar panel overlays are not final CAD, structural approval, electrical single-line design, or a generation guarantee.
+- The quotation BOM still requires site confirmation for roof-specific mounting, cable routes, protection, structure, and utility work.
+- Bank approval, current floating rates, collateral, insurance, tax eligibility, grid approval, and actual export limits remain external decisions.
+- VAT and the published PEA grid-inspection fee are recorded but are not automatically added to the current quote price.
+- Thailand policy assumptions must be re-verified when their stated validity windows expire.
 
-- Separates roof maximum potential from the quoted customer package.
-- Adds a quick package selector so a salesperson can quote a smaller standard system even when the roof can physically fit more capacity.
-- Keeps package sizing tied to KSolar BOM tiers instead of silently inventing arbitrary system sizes.
-- Updates tests so a roof that supports a larger capacity can still be quoted at a smaller selected tier.
+## Production release gate
 
-### Thailand finance and ROI
-
-- Improves finance output from simple checkbox effects into a clearer customer-facing structure:
-  - total investment
-  - subsidy/tax benefit estimate
-  - down payment
-  - financed principal
-  - monthly payment
-  - annual savings
-  - export revenue estimate
-  - payback period
-- Treats Thailand tax deduction benefits as estimated tax value, not a direct cash rebate.
-- Keeps bank-loan assumptions explicit in code configuration so they can be updated after policy and product validation.
-
-### BOM and proposal presentation
-
-- Cleans up BOM summary hierarchy so sales users can separate customer-facing price from internal cost structure.
-- Keeps BOM details available but secondary to price, ROI, and payback.
-- Maintains code-side equipment catalogs and package templates as the source of truth.
-
-## Validation Commands
-
-Run these before each deployment or handoff:
+Run locally or in CI:
 
 ```bash
 npm run lint
@@ -72,21 +56,11 @@ npm run test
 npm run build
 ```
 
-## Known Limits For Field Testing
+Do not release until all of the following pass in production:
 
-- Google Solar's native model still reports its own raw panel assumptions, commonly 400W. KSolar converts capacity comparison into the selected KSolar panel spec, but Google raw values are still shown as technical reference.
-- The panel rectangles are an approximate visualization based on Google panel placements, not final engineering CAD.
-- Current array design is not yet user-editable on the map. Manual panel add/remove, setback rules, and obstruction exclusion are future engineering-design features.
-- Google Solar coverage and imagery quality vary by location. Some Thai roofs may return base-quality imagery or no data.
-- Finance numbers are estimates for sales qualification. Final bank approval, interest rate, down payment, tax eligibility, and subsidy eligibility must be confirmed by the provider.
-- Drawing on mobile still has inherent friction because polygon tapping competes with map pan/zoom gestures; rectangle-first flow is recommended for fast field testing.
-
-## Handoff Guidance
-
-For v1 testing, the team should judge whether the tool answers three field-sales questions quickly:
-
-- Can this roof likely support solar?
-- Which standard KSolar package should we quote?
-- What are the customer-facing investment, monthly payment, savings, and payback?
-
-If a tester questions a number, use the calculation breakdown, Google Solar card, and BOM breakdown to locate whether the issue comes from roof geometry, Google Solar source data, KSolar package selection, pricing, or finance assumptions.
+- `https://ksolar.top/api/health` returns HTTP 200 with Supabase Auth and database checks both `ok`.
+- Production login, customer save, formal quote save, reload, and authorization boundaries are verified with non-admin sales accounts.
+- Address/roof state survives Step 2 -> Step 3 -> Step 2 navigation without re-entry or silent reset.
+- 1P/3P capacity availability, roof maximum, incompatible inverter, no-Google, BASE, wrong-roof, and monthly-bill/export scenarios are smoke-tested.
+- Google browser/server key restrictions, Supabase service-role secrecy, Vercel environment variables, DNS, TLS, and production migrations are confirmed.
+- Desktop, iPhone-size, and Android-size flows remain readable, operable, and free of blocked map controls.

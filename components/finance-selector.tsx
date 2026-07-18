@@ -1,19 +1,23 @@
 "use client";
 
 import { useId, useMemo } from "react";
-import { Landmark, ReceiptText, Wallet } from "lucide-react";
+import { ExternalLink, Landmark, ReceiptText, ShieldCheck, Wallet } from "lucide-react";
 import { useAppCopy, useLocaleContext } from "@/components/locale-provider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { normalizeFinanceProductIds } from "@/lib/calc/finance";
 import { FINANCE_PRODUCTS } from "@/lib/config/finance-products";
+import { THAILAND_ENERGY_POLICY } from "@/lib/config/thailand-energy-policy";
 import { formatNumber } from "@/lib/utils";
 import type { FinanceProduct, FinanceProductType } from "@/types/finance";
 
 interface FinanceSelectorProps {
   selectedFinanceIds: string[];
   onChange: (ids: string[]) => void;
+  taxableIncomeTHB?: number | null;
+  onTaxableIncomeChange?: (value: number | null) => void;
 }
 
 const GROUP_META: Record<FinanceProductType, { icon: typeof Wallet }> = {
@@ -21,15 +25,21 @@ const GROUP_META: Record<FinanceProductType, { icon: typeof Wallet }> = {
   installment: { icon: Wallet },
   subsidy: { icon: ReceiptText },
   tax_credit: { icon: ReceiptText },
+  tax_deduction: { icon: ReceiptText },
 };
 
 const FINANCING_TYPES: FinanceProductType[] = ["loan", "installment"];
-const INCENTIVE_TYPES: FinanceProductType[] = ["subsidy", "tax_credit"];
+const INCENTIVE_TYPES: FinanceProductType[] = ["subsidy", "tax_credit", "tax_deduction"];
 const FINANCING_PRODUCT_IDS = new Set(
   FINANCE_PRODUCTS.filter((product) => FINANCING_TYPES.includes(product.type)).map((product) => product.id),
 );
 
-export function FinanceSelector({ selectedFinanceIds, onChange }: FinanceSelectorProps) {
+export function FinanceSelector({
+  selectedFinanceIds,
+  onChange,
+  taxableIncomeTHB,
+  onTaxableIncomeChange,
+}: FinanceSelectorProps) {
   const copy = useAppCopy();
   const { locale } = useLocaleContext();
   const radioGroupId = useId();
@@ -53,6 +63,13 @@ export function FinanceSelector({ selectedFinanceIds, onChange }: FinanceSelecto
           financingHint: "贷款与分期共用一个选择，只能采用其中一项。",
           financingTitle: "贷款或分期（单选）",
           incentivesTitle: "补贴与税惠（可多选）",
+          policyTitle: "泰国政策基线",
+          policySummary: `Ft ${THAILAND_ENERGY_POLICY.ft.valueTHBPerKWh.toFixed(4)} THB/kWh（至 2026-08-31）· 住宅余电 2.20 THB/kWh · 获批出口上限 5 kW AC`,
+          taxInput: "应税收入（扣除其他减免后）",
+          taxHint: "可选。只有填写后，系统才按泰国累进税率计算实际节税；200,000 THB 不是现金返还。",
+          source: "官方来源",
+          ftSource: "ERC Ft",
+          exportSource: "PEA 住宅余电",
         }
       : locale === "th"
         ? {
@@ -61,6 +78,13 @@ export function FinanceSelector({ selectedFinanceIds, onChange }: FinanceSelecto
             financingHint: "สินเชื่อและแผนผ่อนชำระเลือกได้รวมกันเพียงหนึ่งรายการ",
             financingTitle: "สินเชื่อหรือผ่อนชำระ (เลือกหนึ่งรายการ)",
             incentivesTitle: "เงินสนับสนุนและสิทธิภาษี (เลือกได้หลายรายการ)",
+            policyTitle: "ฐานนโยบายประเทศไทย",
+            policySummary: `Ft ${THAILAND_ENERGY_POLICY.ft.valueTHBPerKWh.toFixed(4)} บาท/kWh (ถึง 31-08-2026) · รับซื้อไฟส่วนเกินบ้าน 2.20 บาท/kWh · ส่งออกที่อนุมัติไม่เกิน 5 kW AC`,
+            taxInput: "เงินได้สุทธิที่ต้องเสียภาษี (หลังหักรายการอื่น)",
+            taxHint: "ไม่บังคับ ระบบจะคำนวณประโยชน์ภาษีเมื่อกรอกเท่านั้น; 200,000 บาทเป็นวงเงินหักรายได้ ไม่ใช่เงินคืน",
+            source: "แหล่งข้อมูลทางการ",
+            ftSource: "ERC Ft",
+            exportSource: "PEA ไฟฟ้าส่วนเกินบ้าน",
           }
         : {
             cashDescription: "Use the cash price without a loan or installment plan.",
@@ -68,6 +92,13 @@ export function FinanceSelector({ selectedFinanceIds, onChange }: FinanceSelecto
             financingHint: "Loans and installment plans share one selection; only one can apply.",
             financingTitle: "Loan or installment (choose one)",
             incentivesTitle: "Subsidies and tax incentives (choose any)",
+            policyTitle: "Thailand policy baseline",
+            policySummary: `Ft ${THAILAND_ENERGY_POLICY.ft.valueTHBPerKWh.toFixed(4)} THB/kWh (to 2026-08-31) · residential export 2.20 THB/kWh · approved export limit 5 kW AC`,
+            taxInput: "Taxable income after other deductions",
+            taxHint: "Optional. Tax savings are calculated only when supplied; THB 200,000 is an income deduction, not cash back.",
+            source: "Official source",
+            ftSource: "ERC Ft",
+            exportSource: "PEA residential export",
           };
   const selectedText =
     locale === "zh"
@@ -75,6 +106,13 @@ export function FinanceSelector({ selectedFinanceIds, onChange }: FinanceSelecto
       : locale === "th"
         ? `เลือกแล้ว ${normalizedFinanceIds.length} รายการ`
         : `${normalizedFinanceIds.length} selected`;
+  const groupLabel = (type: FinanceProductType) => {
+    if (type === "tax_deduction") {
+      return locale === "zh" ? "所得税扣除" : locale === "th" ? "การหักลดหย่อนภาษี" : "Income-tax deduction";
+    }
+
+    return copy.finance.groups[type];
+  };
 
   const selectFinancingProduct = (id: string | null) => {
     const incentiveIds = normalizedFinanceIds.filter(
@@ -106,6 +144,20 @@ export function FinanceSelector({ selectedFinanceIds, onChange }: FinanceSelecto
           </summary>
 
           <div className="mt-4 grid gap-4">
+            <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+              <ShieldCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <div>
+                <div className="font-semibold">{labels.policyTitle}</div>
+                <div className="mt-1 leading-6 text-emerald-900/80">{labels.policySummary}</div>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  <PolicySourceLink href={THAILAND_ENERGY_POLICY.ft.sourceUrl} label={labels.ftSource} />
+                  <PolicySourceLink
+                    href={THAILAND_ENERGY_POLICY.residentialNetBilling.sourceUrl}
+                    label={labels.exportSource}
+                  />
+                </div>
+              </div>
+            </div>
             <fieldset
               className="rounded-lg border border-border/70 bg-background p-4"
               aria-describedby={`${radioGroupId}-financing-hint`}
@@ -152,30 +204,43 @@ export function FinanceSelector({ selectedFinanceIds, onChange }: FinanceSelecto
                     <section key={type} aria-labelledby={headingId} className="grid gap-3">
                       <h3 id={headingId} className="flex items-center gap-2 text-sm font-semibold text-slate-800">
                         <Icon className="size-4 text-primary" aria-hidden="true" />
-                        {copy.finance.groups[type]}
+                        {groupLabel(type)}
                       </h3>
                       {group.map((product) => {
                         const detailsId = `${radioGroupId}-${product.id}-details`;
 
                         return (
-                          <label
+                          <div
                             key={product.id}
-                            className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border/70 bg-background p-3"
+                            className="grid min-h-11 gap-2 rounded-lg border border-border/70 bg-background p-3"
                           >
-                            <input
-                              type="radio"
-                              name={`${radioGroupId}-financing-product`}
-                              value={product.id}
-                              checked={selectedFinancingId === product.id}
-                              onChange={() => selectFinancingProduct(product.id)}
-                              className="mt-0.5 size-5 shrink-0 accent-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                              aria-describedby={detailsId}
-                            />
-                            <span className="grid min-w-0 gap-1">
-                              <span className="text-sm font-semibold text-slate-900">{product.name}</span>
-                              <ProductDetails product={product} detailsId={detailsId} />
-                            </span>
-                          </label>
+                            <label className="flex cursor-pointer items-start gap-3">
+                              <input
+                                type="radio"
+                                name={`${radioGroupId}-financing-product`}
+                                value={product.id}
+                                checked={selectedFinancingId === product.id}
+                                onChange={() => selectFinancingProduct(product.id)}
+                                className="mt-0.5 size-5 shrink-0 accent-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                aria-describedby={detailsId}
+                              />
+                              <span className="grid min-w-0 gap-1">
+                                <span className="text-sm font-semibold text-slate-900">{product.name}</span>
+                                <ProductDetails product={product} detailsId={detailsId} />
+                              </span>
+                            </label>
+                            {product.officialSourceUrl ? (
+                              <a
+                                href={product.officialSourceUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex min-h-11 items-center gap-1 justify-self-start px-1 text-xs font-semibold text-slate-700 underline underline-offset-4"
+                              >
+                                {labels.source}
+                                <ExternalLink className="size-3" aria-hidden="true" />
+                              </a>
+                            ) : null}
+                          </div>
                         );
                       })}
                     </section>
@@ -185,6 +250,30 @@ export function FinanceSelector({ selectedFinanceIds, onChange }: FinanceSelecto
             </fieldset>
 
             <div className="text-sm font-semibold text-slate-900">{labels.incentivesTitle}</div>
+            {onTaxableIncomeChange ? (
+              <div className="rounded-lg border border-border/70 bg-background p-4">
+                <Label htmlFor={`${radioGroupId}-taxable-income`} className="text-sm font-semibold text-slate-900">
+                  {labels.taxInput}
+                </Label>
+                <Input
+                  id={`${radioGroupId}-taxable-income`}
+                  className="mt-2"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  inputMode="decimal"
+                  value={taxableIncomeTHB ?? ""}
+                  onChange={(event) => {
+                    const nextValue = event.target.value === "" ? null : Number(event.target.value);
+                    onTaxableIncomeChange(Number.isFinite(nextValue) ? nextValue : null);
+                  }}
+                  aria-describedby={`${radioGroupId}-taxable-income-hint`}
+                />
+                <p id={`${radioGroupId}-taxable-income-hint`} className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {labels.taxHint}
+                </p>
+              </div>
+            ) : null}
             {INCENTIVE_TYPES.map((type) => {
               const group = FINANCE_PRODUCTS.filter((product) => product.type === type);
               if (group.length === 0) {
@@ -198,7 +287,7 @@ export function FinanceSelector({ selectedFinanceIds, onChange }: FinanceSelecto
                   <legend className="px-1 text-sm font-semibold text-slate-900">
                     <span className="inline-flex items-center gap-2">
                       <Icon className="size-4 text-primary" aria-hidden="true" />
-                      {copy.finance.groups[type]}
+                      {groupLabel(type)}
                     </span>
                   </legend>
                   <div className="grid gap-3">
@@ -209,21 +298,34 @@ export function FinanceSelector({ selectedFinanceIds, onChange }: FinanceSelecto
                       return (
                         <div
                           key={product.id}
-                          className="flex min-h-11 items-start gap-3 rounded-lg border border-border/70 bg-background p-3"
+                          className="grid min-h-11 gap-2 rounded-lg border border-border/70 bg-background p-3"
                         >
-                          <div className="flex min-h-11 min-w-11 items-center justify-center">
-                            <Checkbox
-                              id={checkboxId}
-                              checked={normalizedFinanceIds.includes(product.id)}
-                              onCheckedChange={(checked) => setIncentiveSelected(product.id, checked === true)}
-                              className="size-5"
-                              aria-describedby={detailsId}
-                            />
+                          <div className="flex items-start gap-3">
+                            <div className="flex min-h-11 min-w-11 items-center justify-center">
+                              <Checkbox
+                                id={checkboxId}
+                                checked={normalizedFinanceIds.includes(product.id)}
+                                onCheckedChange={(checked) => setIncentiveSelected(product.id, checked === true)}
+                                className="size-5"
+                                aria-describedby={detailsId}
+                              />
+                            </div>
+                            <Label htmlFor={checkboxId} className="grid min-w-0 flex-1 cursor-pointer gap-1">
+                              <span className="text-sm font-semibold text-slate-900">{product.name}</span>
+                              <ProductDetails product={product} detailsId={detailsId} />
+                            </Label>
                           </div>
-                          <Label htmlFor={checkboxId} className="grid min-w-0 flex-1 cursor-pointer gap-1">
-                            <span className="text-sm font-semibold text-slate-900">{product.name}</span>
-                            <ProductDetails product={product} detailsId={detailsId} />
-                          </Label>
+                          {product.officialSourceUrl ? (
+                            <a
+                              href={product.officialSourceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex min-h-11 items-center gap-1 justify-self-start px-1 text-xs font-semibold text-slate-700 underline underline-offset-4"
+                            >
+                              {labels.source}
+                              <ExternalLink className="size-3" aria-hidden="true" />
+                            </a>
+                          ) : null}
                         </div>
                       );
                     })}
@@ -238,11 +340,34 @@ export function FinanceSelector({ selectedFinanceIds, onChange }: FinanceSelecto
   );
 }
 
+function PolicySourceLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-emerald-950 underline underline-offset-4"
+    >
+      {label}
+      <ExternalLink className="size-3" aria-hidden="true" />
+    </a>
+  );
+}
+
 function ProductDetails({ product, detailsId }: { product: FinanceProduct; detailsId: string }) {
+  const firstRate = product.rateSchedule?.[0];
+  const lastRate = product.rateSchedule?.[product.rateSchedule.length - 1];
+
   return (
     <span id={detailsId} className="grid gap-1">
       <span className="flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
-        {product.annualRatePercent !== undefined ? (
+        {firstRate ? (
+          <span className="rounded-full bg-muted px-2 py-1">
+            {firstRate.annualRatePercent === lastRate?.annualRatePercent
+              ? `${formatNumber(firstRate.annualRatePercent, 2)}% p.a.`
+              : `${formatNumber(firstRate.annualRatePercent, 2)}% → ${formatNumber(lastRate?.annualRatePercent || 0, 2)}%`}
+          </span>
+        ) : product.annualRatePercent !== undefined ? (
           <span className="rounded-full bg-muted px-2 py-1">
             {formatNumber(product.annualRatePercent, 2)}% p.a.
           </span>
@@ -265,7 +390,16 @@ function ProductDetails({ product, detailsId }: { product: FinanceProduct; detai
             est. tax value {formatNumber(product.taxBenefitRatePercent, 0)}%
           </span>
         ) : null}
+        {product.validTo ? (
+          <span className="rounded-full bg-muted px-2 py-1">valid to {product.validTo}</span>
+        ) : null}
+        {product.customerSegments?.length ? (
+          <span className="rounded-full bg-muted px-2 py-1">{product.customerSegments.join(" / ")}</span>
+        ) : null}
       </span>
+      {product.eligibility ? (
+        <span className="text-sm font-normal leading-6 text-muted-foreground">{product.eligibility}</span>
+      ) : null}
       {product.notes ? (
         <span className="text-sm font-normal leading-6 text-muted-foreground">{product.notes}</span>
       ) : null}

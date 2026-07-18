@@ -1,4 +1,5 @@
 import type { CapacityTier, SystemTopology } from "@/types/bom";
+import { THAILAND_ENERGY_POLICY } from "@/lib/config/thailand-energy-policy";
 
 export const SOLAR_DEFAULTS = {
   panelPowerWp: 650,
@@ -7,8 +8,9 @@ export const SOLAR_DEFAULTS = {
   sunlightHours: 4.0,
   systemLossRatio: 0.15,
   baseRateTHBPerKWh: 4.18,
-  defaultFtRateTHBPerKWh: 0,
-  defaultExportRateTHBPerKWh: 2.2,
+  defaultFtRateTHBPerKWh: THAILAND_ENERGY_POLICY.ft.valueTHBPerKWh,
+  defaultExportRateTHBPerKWh:
+    THAILAND_ENERGY_POLICY.residentialNetBilling.exportRateTHBPerKWh,
   defaultSelfConsumptionRatio: 0.6,
   projectLifeYears: 25,
   degradationRatio: 0.005,

@@ -1,20 +1,31 @@
-# KSolar MVP
+# KSolar
 
-KSolar is a Next.js rooftop solar quotation MVP for the Thailand market.
+KSolar is a Next.js sales application for Thai rooftop-solar screening and quotation. It preserves one traceable path from roof selection to capacity, electrical checks, BOM, price, finance, and project returns.
 
-The app is designed for fast field quoting:
-- draw or select a roof on Google Maps
-- estimate usable area and system size
-- compare Google Solar guidance with KSolar sellable system logic
-- generate BOM, pricing, and ROI outputs from code-side rules
+## Production architecture
 
-## Local Development
+- **Vercel / Next.js App Router** hosts the web UI and authenticated server routes.
+- **Supabase Auth + Postgres** handles sales accounts, CRM records, quote versions, and Row Level Security.
+- **Google Maps JavaScript API** provides address search and roof drawing in the browser.
+- **Google Solar API** is called only through authenticated server routes; the key is never sent to the browser.
+- **Typed calculation modules** under `lib/calc/*` and versioned configuration under `lib/config/*` are the runtime source of truth. Excel files are not runtime dependencies.
 
-Requirements:
-- Node.js 20+
-- npm 10+
+The main data flow is:
 
-Setup:
+`address and roof selection -> Google/manual roof evidence -> capacity intent -> electrical validation -> BOM and pricing -> Thailand tariff/finance -> saved Supabase quote`
+
+## Quotation modes
+
+- Standard packages are **5, 10, 15, and 20 kW targets**. Installed DC capacity is rounded up to a whole selected module.
+- One-phase packages currently allow 5 and 10 kW. Three-phase packages allow 5, 10, 15, and 20 kW.
+- **Roof maximum** has no package cap, but is a technical-potential result only. It has no committed price or BOM and cannot be saved as a formal quote.
+- A formal quote is produced only when the roof supports the selected package and a compatible inverter/BOM can be resolved.
+
+See [calculation formulas](./docs/formulas.md), [Google Solar accuracy and roadmap](./docs/google-solar-roadmap.md), and [v1 release notes](./docs/release-notes-v1.md).
+
+## Local setup
+
+Requirements: Node.js 20+ and npm 10+.
 
 ```bash
 cp .env.local.example .env.local
@@ -24,86 +35,36 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Environment Variables
-
-Create `.env.local` with:
+Required environment variables:
 
 ```bash
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_browser_maps_key
-GOOGLE_SOLAR_API_KEY=your_server_side_solar_key
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=browser_maps_key
+GOOGLE_MAPS_API_KEY=server_geocoding_key
+GOOGLE_SOLAR_API_KEY=server_solar_key
+NEXT_PUBLIC_SUPABASE_URL=supabase_project_url
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=supabase_publishable_key
+SUPABASE_SERVICE_ROLE_KEY=server_only_service_role_key
+KSOLAR_ENABLE_PUBLIC_SIGNUP=false
 ```
 
-Notes:
-- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is used in the browser for the map UI.
-- `GOOGLE_SOLAR_API_KEY` is used only by the server route at `/api/solar/building-insights`.
-- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` enable the sales login and CRM foundation.
-- Do not commit real keys into Git.
+Security rules:
 
-## Best Way To Share With Teammates
+- Restrict the browser Maps key to `https://ksolar.top/*`, approved Vercel preview domains, and the required browser APIs.
+- Restrict server keys to their required Google APIs. Never expose them through `NEXT_PUBLIC_*`.
+- Keep the Supabase service-role key server-only. Never use it in a client component.
+- Keep public signup disabled unless Supabase Auth, profile creation, and operational approval are ready.
 
-The recommended path for internal testing is a Vercel preview deployment.
+## Operational boundaries
 
-Why this is the best fit:
-- Next.js is supported with zero-config deployment on Vercel.
-- Every push can create a fresh preview URL for QA.
-- You can keep Google Solar on the server side with environment variables.
-- Teammates only need a link, no local setup.
+- Google Solar is remote-screening evidence, not a site survey, structural report, electrical design, or construction CAD.
+- Google `BASE` imagery is reference-only in KSolar and cannot override formal panel count, yield, BOM, or pricing.
+- Thailand policy and bank assumptions were last verified on **2026-07-18**. Validity dates and official sources are recorded in `lib/config/thailand-energy-policy.ts` and `lib/config/finance-products.ts`.
+- Bank approval, collateral, insurance, floating rates, tax eligibility, grid approval, and actual export limits must be confirmed by the responsible provider.
+- UI review follows Apple's Human Interface Guidelines as a product-design baseline: preserve user context, make status visible, provide clear next actions, support reversal, and keep touch targets usable. This is a review standard, not an Apple certification.
 
-Recommended workflow:
-1. Push the project to GitHub.
-2. Import the repo into Vercel.
-3. Add the two environment variables in the Vercel project settings.
-4. Create one stable test deployment for colleagues.
-5. Restrict the Google Maps browser key to your Vercel domains.
+## Release validation
 
-Suggested domain allowlist examples for the browser key:
-- `https://your-project.vercel.app/*`
-- `https://your-branch-slug-your-project.vercel.app/*`
-- any custom internal test domain you attach later
-
-For the Solar key:
-- keep it server-side only
-- restrict it to the Solar API
-- if possible, place it in a separate Google Cloud project from the browser key
-
-## Alternative Sharing Options
-
-If you do not want to deploy yet, there are two backup options:
-
-1. Local LAN demo
-- Run `npm run dev`
-- Share your laptop IP and port on the same network
-- Fastest for in-office testing
-- Least stable for repeated testing
-
-2. Zip plus run guide
-- Share the project files without `node_modules` and without `.env.local`
-- Teammates run `npm install` and create their own `.env.local`
-- Good for developers, not ideal for business testers
-
-## Project Principles
-
-- Excel files are modeling references only, not runtime dependencies.
-- The source of truth lives in typed code under `lib/config/*`.
-- Calculation steps are meant to stay inspectable and testable.
-- UI components should display logic, not hide it.
-
-## Planning Documents
-
-- [v1.0 test plan](./docs/v1-test-plan.md)
-- [Web/PWA rollout](./docs/pwa-rollout.md)
-- [calculation workflow](./docs/calculation-workflow.md)
-- [Google Solar roadmap](./docs/google-solar-roadmap.md)
-- [production architecture](./docs/production-architecture.md)
-- [AI workflow architecture](./docs/ai-workflow-architecture.md)
-- [CRM data model](./docs/crm-data-model.md)
-- [Auth and CRM rollout](./docs/auth-and-crm-rollout.md)
-
-## Validation
-
-Useful commands:
+Run the full local gate before deployment:
 
 ```bash
 npm run lint
@@ -111,12 +72,13 @@ npm run test
 npm run build
 ```
 
-## Deployment Checklist
+After deploying to `ksolar.top`, verify:
 
-Before sharing broadly:
-- confirm map loads on desktop and mobile
-- confirm address search works on the deployed domain
-- confirm Google Solar route responds without server errors
-- confirm the browser key has referrer restrictions
-- confirm the Solar key is not exposed to the client
-- confirm the quote engine does not oversize beyond Google-matched roof fit
+1. `GET https://ksolar.top/api/health` returns HTTP 200 with `auth: "ok"` and `database: "ok"`.
+2. A production sales user can sign in, save a customer and formal quote, reload it, and remains restricted to authorized data.
+3. Address search, roof drawing, back navigation, and returning to Step 3 preserve the selected address and roof.
+4. Google Solar returns through the authenticated proxy without exposing `GOOGLE_SOLAR_API_KEY`; unavailable or BASE-only locations fall back safely.
+5. 5/10/15/20 kW availability changes correctly by phase, roof fit, selected module, and compatible inverter.
+6. Roof maximum is labelled technical-only and cannot be saved as a formal quote.
+7. Monthly bill caps self-use savings; export revenue is zero until grid export is marked approved.
+8. Vercel production variables, custom-domain DNS/TLS, Google key restrictions, and Supabase migrations are all confirmed in the production environment.

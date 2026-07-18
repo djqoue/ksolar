@@ -211,6 +211,84 @@ describe("saveQuote server action", () => {
     expect(mocks.createSupabaseServerClient).not.toHaveBeenCalled();
   });
 
+  it("rejects roof-potential analysis before authentication or database access", async () => {
+    const roofPotentialInput: QuoteScenarioInput = {
+      ...quoteInput,
+      map: {
+        ...quoteInput.map,
+        grossAreaM2: 1_200,
+        usableAreaM2: 840,
+      },
+      topology: { phase: "3P", mode: "ongrid", batteryMode: "none" },
+      capacityIntent: { mode: "roof-potential" },
+    };
+    const technicalResult = calculateQuoteScenario(roofPotentialInput);
+
+    expect(technicalResult.isViable).toBe(true);
+    expect(technicalResult.quoteReady).toBe(false);
+
+    const state = await saveQuote({
+      customerId: CUSTOMER_ID,
+      input: roofPotentialInput,
+      result: {
+        ...technicalResult,
+        quoteReady: true,
+        quoteReadiness: "ready",
+      },
+    });
+
+    expect(state).toMatchObject({ status: "error", code: "invalid_input" });
+    expect(mocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(mocks.createSupabaseServiceRoleClient).not.toHaveBeenCalled();
+  });
+
+  it("accepts the new standard capacity intent at the server boundary", async () => {
+    const explicitStandardInput: QuoteScenarioInput = {
+      ...quoteInput,
+      capacityIntent: { mode: "standard", targetKW: 10 },
+    };
+    const rpc = vi.fn().mockReturnValue({
+      single: vi.fn().mockResolvedValue({
+        data: {
+          quote_project_id: PROJECT_ID,
+          quote_version_id: VERSION_ID,
+          quote_code: "KS-20260718-2222222222224222-V001",
+        },
+        error: null,
+      }),
+    });
+
+    mocks.createSupabaseServerClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: ACTOR_ID } },
+          error: null,
+        }),
+      },
+    });
+    mocks.createSupabaseServiceRoleClient.mockReturnValue({ rpc });
+
+    const state = await saveQuote({
+      customerId: CUSTOMER_ID,
+      input: explicitStandardInput,
+    });
+
+    expect(state.status).toBe("success");
+    expect(rpc).toHaveBeenCalledWith(
+      "save_quote_atomic",
+      expect.objectContaining({
+        p_quote_input: expect.objectContaining({
+          capacityIntent: { mode: "standard", targetKW: 10 },
+        }),
+        p_quote_result: expect.objectContaining({
+          quoteReady: true,
+          quoteReadiness: "ready",
+          capacityIntent: { mode: "standard", targetKW: 10 },
+        }),
+      }),
+    );
+  });
+
   it("returns a clear unauthenticated state without invoking the quote RPC", async () => {
     const rpc = vi.fn();
 

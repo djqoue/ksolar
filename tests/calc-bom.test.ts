@@ -41,15 +41,13 @@ describe("buildBomScenario", () => {
     expect(result?.lineItems.some((item) => item.model === "ATS 4P 63A")).toBe(true);
   });
 
-  it("formula quantities reproduce hardcoded template values for all tiers", () => {
-    // Validates that calcBomQuantities() matches the static BOM catalog exactly.
-    // If this test fails after a catalog change, update bom-quantities.ts to match.
+  it("derives exact mounting quantities from physical rows", () => {
     const cases: Array<{ panels: number; itemId: string; expected: number }> = [
       // 3kW — 5 panels, 1 row
       { panels: 5, itemId: "mount-rail", expected: 6 },
       { panels: 5, itemId: "mount-rail-splice", expected: 4 },
       { panels: 5, itemId: "mount-mid-clamp", expected: 8 },
-      { panels: 5, itemId: "mount-end-clamp", expected: 8 },
+      { panels: 5, itemId: "mount-end-clamp", expected: 4 },
       { panels: 5, itemId: "mount-tile-hook", expected: 10 },
       { panels: 5, itemId: "mount-ground-washer", expected: 5 },
       { panels: 5, itemId: "mount-ground-lug", expected: 2 },
@@ -65,6 +63,7 @@ describe("buildBomScenario", () => {
       { panels: 16, itemId: "mount-rail", expected: 16 },
       { panels: 16, itemId: "mount-rail-splice", expected: 12 },
       { panels: 16, itemId: "mount-mid-clamp", expected: 28 },
+      { panels: 16, itemId: "mount-end-clamp", expected: 8 },
       { panels: 16, itemId: "mount-tile-hook", expected: 32 },
       { panels: 16, itemId: "mount-ground-washer", expected: 16 },
       { panels: 16, itemId: "mount-ground-lug", expected: 4 },
@@ -80,8 +79,10 @@ describe("buildBomScenario", () => {
       { panels: 24, itemId: "mount-tile-hook", expected: 48 },
       { panels: 24, itemId: "mount-ground-lug", expected: 6 },
       // 20kW — 31 panels, 3 rows
-      { panels: 31, itemId: "mount-rail", expected: 36 },
-      { panels: 31, itemId: "mount-rail-splice", expected: 30 },
+      { panels: 31, itemId: "mount-rail", expected: 32 },
+      { panels: 31, itemId: "mount-rail-splice", expected: 26 },
+      { panels: 31, itemId: "mount-mid-clamp", expected: 56 },
+      { panels: 31, itemId: "mount-end-clamp", expected: 12 },
       { panels: 31, itemId: "mount-tile-hook", expected: 62 },
       { panels: 31, itemId: "mount-ground-washer", expected: 31 },
       { panels: 31, itemId: "dc-pv-cable", expected: 2 },
@@ -91,6 +92,19 @@ describe("buildBomScenario", () => {
       const qty = calcBomQuantities(panels);
       expect(qty[itemId], `panels=${panels} ${itemId}`).toBe(expected);
     }
+  });
+
+  it("uses selected module width instead of the legacy width for rails", () => {
+    const quantities = calcBomQuantities(16, {
+      panelWidthMm: 1303,
+      rowPanelCounts: [8, 8],
+      stringCount: 2,
+    });
+
+    expect(quantities["mount-rail"]).toBe(20);
+    expect(quantities["mount-rail-splice"]).toBe(16);
+    expect(quantities["mount-end-clamp"]).toBe(8);
+    expect(quantities["dc-spd"]).toBe(2);
   });
 
   it("formula quantities are applied when panelCount is passed to buildBomScenario", () => {

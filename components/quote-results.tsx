@@ -1,20 +1,24 @@
-import { AlertTriangle, ChartColumnIncreasing, SunMedium, Telescope } from "lucide-react";
+import { AlertTriangle, ChartColumnIncreasing, CircleCheck, Info, SunMedium, Telescope } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useAppCopy, useLocaleContext } from "@/components/locale-provider";
-import { buildSolarCrossCheckSummary, type SellablePanelProfile, type SolarSelectionMatchSummary } from "@/lib/solar";
 import {
-  getLocalizedSolarActionSummary,
-  getLocalizedSolarConfidenceSummary,
+  buildSolarCrossCheckSummary,
+  type SellablePanelProfile,
+  type SolarCrossCheckSummary,
+  type SolarSelectionMatchSummary,
+} from "@/lib/solar";
+import {
   localizeCalculationEntry,
   localizeWarning,
+  type AppLocale,
 } from "@/lib/i18n";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { THAILAND_ENERGY_POLICY } from "@/lib/config/thailand-energy-policy";
 import type { QuoteScenarioResult } from "@/types/quote";
 import type { GoogleSolarSummary } from "@/types/solar";
-import type { CapacityTier, CapacityTierId } from "@/types/bom";
 import { BomBreakdown } from "@/components/bom-breakdown";
 import { RoiSummary } from "@/components/roi-summary";
 
@@ -23,9 +27,6 @@ interface QuoteResultsProps {
   solarInsights?: GoogleSolarSummary | null;
   sellablePanelProfile: SellablePanelProfile;
   solarSelectionMatch?: SolarSelectionMatchSummary | null;
-  availableQuoteTiers: CapacityTier[];
-  selectedTierId: CapacityTierId | null;
-  onSelectedTierChange: (tierId: CapacityTierId | null) => void;
 }
 
 export function QuoteResults({
@@ -33,93 +34,41 @@ export function QuoteResults({
   solarInsights,
   sellablePanelProfile,
   solarSelectionMatch,
-  availableQuoteTiers,
-  selectedTierId,
-  onSelectedTierChange,
 }: QuoteResultsProps) {
   const copy = useAppCopy();
   const { locale } = useLocaleContext();
   const solarCrossCheck = solarInsights
     ? buildSolarCrossCheckSummary(solarInsights, result.roofFitSystemWp, sellablePanelProfile)
     : null;
-  const isSolarConfirmed = solarSelectionMatch?.status === "inside-selection";
+  if (!result.quoteReady) {
+    return (
+      <div className="grid gap-4">
+        <WarningSummary warnings={result.warnings} locale={locale} />
+        <TechnicalPotentialReport result={result} locale={locale} />
+        <ProfessionalSolarReport
+          result={result}
+          solarInsights={solarInsights}
+          solarSelectionMatch={solarSelectionMatch}
+          solarCrossCheck={solarCrossCheck}
+          locale={locale}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4">
-      {result.warnings.length > 0 && (
-        <Card className="border-amber-300 bg-amber-50">
-          <CardContent className="flex items-start gap-3 p-5 text-sm text-amber-900">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <div className="grid gap-1">
-              {result.warnings.map((warning) => (
-                <p key={warning}>{localizeWarning(locale, warning)}</p>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <WarningSummary warnings={result.warnings} locale={locale} />
 
       <RoiSummary result={result} />
 
-      <Card className="border-white/75 bg-white/90">
-        <CardHeader className="pb-3">
-          <CardTitle>
-            {locale === "zh" ? "客户容量" : locale === "th" ? "ขนาดแพ็กเกจ" : "Customer Package"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <div className="text-sm leading-6 text-muted-foreground">
-            {locale === "zh"
-              ? `屋顶上限约 ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp。按客户预算选标准档位，价格和回本会即时更新。`
-              : locale === "th"
-                ? `หลังคารองรับได้ประมาณ ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp เลือกแพ็กเกจตามงบลูกค้า ราคาและคืนทุนจะปรับทันที`
-                : `Roof limit is about ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp. Pick a standard package and price/payback update instantly.`}
-          </div>
-          <div
-            className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5"
-            role="group"
-            aria-label={locale === "zh" ? "客户容量" : locale === "th" ? "ขนาดแพ็กเกจ" : "Customer package"}
-          >
-            {availableQuoteTiers.map((tier) => {
-              const isActive = result.recommendedTier?.id === tier.id;
-              const realSizeKw = (tier.panelCount * sellablePanelProfile.powerWp) / 1000;
-
-              return (
-                <button
-                  key={tier.id}
-                  type="button"
-                  aria-pressed={isActive}
-                  onClick={() => onSelectedTierChange(tier.id)}
-                  className={
-                    isActive
-                      ? "rounded-2xl border border-slate-950 bg-slate-950 p-4 text-left text-white shadow-[0_18px_48px_rgba(15,23,42,0.18)]"
-                      : "rounded-2xl border border-border/80 bg-white p-4 text-left transition hover:border-slate-300 hover:shadow-[0_12px_30px_rgba(15,23,42,0.08)]"
-                  }
-                >
-                  <div className={isActive ? "text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55" : "metric-label"}>
-                    {tier.id}
-                  </div>
-                  <div className="mt-1 text-2xl font-semibold tracking-[-0.04em]">
-                    {formatNumber(realSizeKw, 1)} kWp
-                  </div>
-                  <div className={isActive ? "mt-1 text-sm text-white/58" : "mt-1 text-sm text-muted-foreground"}>
-                    {tier.panelCount} panels
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-          {selectedTierId ? (
-            <button
-              type="button"
-              className="min-h-11 justify-self-start rounded-lg px-2 text-sm font-semibold text-slate-900 underline underline-offset-4"
-              onClick={() => onSelectedTierChange(null)}
-            >
-              {locale === "zh" ? "恢复系统推荐" : locale === "th" ? "กลับไปใช้คำแนะนำระบบ" : "Restore system recommendation"}
-            </button>
-          ) : null}
-        </CardContent>
-      </Card>
+      <ProfessionalSolarReport
+        result={result}
+        solarInsights={solarInsights}
+        solarSelectionMatch={solarSelectionMatch}
+        solarCrossCheck={solarCrossCheck}
+        locale={locale}
+      />
 
       <details className="rounded-2xl border border-border bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.035)]">
         <summary className="cursor-pointer list-none text-sm font-semibold text-slate-950 marker:hidden">
@@ -137,81 +86,6 @@ export function QuoteResults({
           </span>
         </summary>
         <div className="mt-4 grid gap-4">
-      {solarInsights ? (
-        <Card className="border-border bg-muted/10">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Telescope className="size-4 text-primary" />
-              <CardTitle>{copy.quote.solarCrossCheck}</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <div className="rounded-[1.25rem] border border-white/50 bg-white/80 p-4 text-sm text-slate-700">
-              <p className="font-medium text-slate-900">
-                {solarCrossCheck ? getLocalizedSolarActionSummary(locale, solarCrossCheck) : copy.quote.solarCrossCheckDescription}
-              </p>
-              <p className="mt-1 text-muted-foreground">
-                {solarCrossCheck
-                  ? getLocalizedSolarConfidenceSummary(locale, solarInsights, solarCrossCheck.confidenceSummary)
-                  : copy.quote.solarCrossCheckDescription}
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-2xl border border-white/50 bg-white/80 p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.solar.roofFitEstimate}</div>
-                <div className="mt-2 text-2xl font-semibold">
-                  {solarCrossCheck ? `${formatNumber(solarCrossCheck.manualKw, 2)} kWp` : "N/A"}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-white/50 bg-white/80 p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.solar.ksolarEquivalent}</div>
-                <div className="mt-2 text-2xl font-semibold">
-                  {solarCrossCheck?.sellableFitKw !== null && solarCrossCheck?.sellableFitKw !== undefined
-                    ? `${formatNumber(solarCrossCheck.sellableFitKw, 2)} kWp`
-                    : solarCrossCheck?.normalizedEquivalentKw !== null && solarCrossCheck?.normalizedEquivalentKw !== undefined
-                      ? `${formatNumber(solarCrossCheck.normalizedEquivalentKw, 2)} kWp`
-                    : "N/A"}
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {solarInsights && !isSolarConfirmed
-                    ? copy.solar.referenceOnlyGoogleBuilding
-                    : solarCrossCheck?.sellableFitPanelCount !== null &&
-                  solarCrossCheck?.sellableFitPanelCount !== undefined
-                    ? copy.solar.ksolarPanelCount(solarCrossCheck.sellableFitPanelCount)
-                    : solarCrossCheck?.normalizedEquivalentPanelCount !== null &&
-                        solarCrossCheck?.normalizedEquivalentPanelCount !== undefined
-                      ? copy.solar.ksolarPanelCount(solarCrossCheck.normalizedEquivalentPanelCount)
-                    : copy.solar.sameSpecUnavailable}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-white/50 bg-white/80 p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.solar.googleRawLayout}</div>
-                <div className="mt-2 text-2xl font-semibold">
-                  {solarCrossCheck?.googleRawKw !== null && solarCrossCheck?.googleRawKw !== undefined
-                    ? `${formatNumber(solarCrossCheck.googleRawKw, 2)} kWp`
-                    : "N/A"}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-white/50 bg-white/80 p-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.quote.deltaVsQuote}</div>
-                <div className="mt-2 text-2xl font-semibold">
-                  {solarCrossCheck?.deltaKw !== null && solarCrossCheck?.deltaKw !== undefined
-                    ? `${solarCrossCheck.deltaKw > 0 ? "+" : ""}${formatNumber(solarCrossCheck.deltaKw, 2)} kWp`
-                    : "N/A"}
-                </div>
-              </div>
-            </div>
-            <div className="rounded-[1.25rem] border border-white/50 bg-white/80 p-4 text-sm text-slate-700">
-              {copy.solar.imageryQuality}: <span className="font-semibold">{solarInsights.imageryQuality}</span>
-              {" · "}
-              {copy.solar.maxArrayArea}: <span className="font-semibold">{formatNumber(solarInsights.maxArrayAreaMeters2, 1)} m²</span>
-              {" · "}
-              {copy.solar.googlePanelWattage}: <span className="font-semibold">{formatNumber(solarInsights.panelCapacityWatts)} W</span>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-4">
@@ -239,10 +113,10 @@ export function QuoteResults({
           >
             {result.generationModel === "google-solar-calibrated"
               ? locale === "zh"
-                ? `当前报价年发电量已用 Google Solar 的屋顶日照、阴影、坡度和朝向校准，并扣除 ${formatNumber(result.generationSystemLossRatio * 100, 0)}% 系统损耗。单位发电量约 ${formatNumber(result.generationSpecificYieldKWhPerKWp, 0)} kWh/kWp/年。`
+                ? `当前报价年发电量采用已通过圈选匹配门槛的 Google 建筑级年发电模型，再扣除 ${formatNumber(result.generationSystemLossRatio * 100, 0)}% 系统损耗；单位发电量约 ${formatNumber(result.generationSpecificYieldKWhPerKWp, 0)} kWh/kWp/年。它仍不是现场测量。`
                 : locale === "th"
-                  ? `พลังงานของใบเสนอราคานี้ปรับด้วย Google Solar ทั้งแดด เงา ความลาด และทิศทางหลังคา แล้วหัก loss ระบบ ${formatNumber(result.generationSystemLossRatio * 100, 0)}% เหลือประมาณ ${formatNumber(result.generationSpecificYieldKWhPerKWp, 0)} kWh/kWp/ปี`
-                  : `Quoted annual energy is calibrated by Google Solar roof sun access, shade, pitch, and azimuth, then derated by ${formatNumber(result.generationSystemLossRatio * 100, 0)}% system loss. Specific yield is about ${formatNumber(result.generationSpecificYieldKWhPerKWp, 0)} kWh/kWp/yr.`
+                  ? `พลังงานใช้แบบจำลองรายปีระดับอาคารของ Google ที่ผ่านเกณฑ์จับคู่พื้นที่ แล้วหัก loss ระบบ ${formatNumber(result.generationSystemLossRatio * 100, 0)}% เหลือประมาณ ${formatNumber(result.generationSpecificYieldKWhPerKWp, 0)} kWh/kWp/ปี ทั้งนี้ไม่ใช่การสำรวจหน้างาน`
+                  : `Annual energy uses a Google building-level yield model that passed the selection gate, then applies ${formatNumber(result.generationSystemLossRatio * 100, 0)}% system loss. Specific yield is about ${formatNumber(result.generationSpecificYieldKWhPerKWp, 0)} kWh/kWp/yr; it is not a site survey.`
               : locale === "zh"
                 ? `当前未匹配 Google Solar 屋顶模型，报价年发电量使用泰国默认 4.0h 日照和 ${formatNumber(result.generationSystemLossRatio * 100, 0)}% 系统损耗。`
                 : locale === "th"
@@ -314,6 +188,274 @@ function SummaryMetric({ label, value }: { label: string; value: string }) {
     <div className="rounded-[1.1rem] border border-border/70 p-4">
       <div className="metric-label">{label}</div>
       <div className="mt-2 text-xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function WarningSummary({ warnings, locale }: { warnings: string[]; locale: AppLocale }) {
+  if (warnings.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card className="border-amber-300 bg-amber-50">
+      <CardContent className="flex items-start gap-3 p-5 text-sm text-amber-900">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        <div className="grid gap-1">
+          {warnings.map((warning) => (
+            <p key={warning}>{localizeWarning(locale, warning)}</p>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TechnicalPotentialReport({
+  result,
+  locale,
+}: {
+  result: QuoteScenarioResult;
+  locale: AppLocale;
+}) {
+  const labels =
+    locale === "zh"
+      ? {
+          title: "屋顶最大发电潜力",
+          status: result.engineeringReviewRequired ? "需工程复核" : "技术潜力",
+          capacity: "理论 DC 容量",
+          panels: "组件数量",
+          energy: "首年发电量",
+          range: "建议分析区间",
+          note: "这是远程技术潜力分析，不生成承诺性设备报价。请返回第三步选择 5/10/15/20 kW 才能形成固定 BOM 和价格。",
+        }
+      : locale === "th"
+        ? {
+            title: "ศักยภาพผลิตไฟสูงสุดของหลังคา",
+            status: result.engineeringReviewRequired ? "ต้องตรวจโดยวิศวกร" : "ศักยภาพทางเทคนิค",
+            capacity: "กำลัง DC เชิงทฤษฎี",
+            panels: "จำนวนแผง",
+            energy: "พลังงานปีแรก",
+            range: "ช่วงวิเคราะห์ที่แนะนำ",
+            note: "นี่คือการวิเคราะห์ศักยภาพระยะไกล ไม่ใช่ราคาอุปกรณ์ที่ผูกพัน กรุณากลับไปเลือก 5/10/15/20 kW เพื่อสร้าง BOM และราคา",
+          }
+        : {
+            title: "Maximum roof generation potential",
+            status: result.engineeringReviewRequired ? "Engineering review" : "Technical potential",
+            capacity: "Theoretical DC capacity",
+            panels: "Module count",
+            energy: "First-year energy",
+            range: "Suggested analysis range",
+            note: "This is a remote technical-potential assessment, not a committed equipment quote. Return to Step 3 and select 5/10/15/20 kW for a fixed BOM and price.",
+          };
+  const lowGenerationKWh = result.annualGenerationKWh * 0.9;
+  const highGenerationKWh = result.annualGenerationKWh * 1.1;
+
+  return (
+    <Card className="overflow-hidden border-slate-950 bg-slate-950 text-white">
+      <CardHeader className="border-b border-white/10">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle>{labels.title}</CardTitle>
+          <Badge variant="secondary">{labels.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4 p-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <DarkReportMetric label={labels.capacity} value={`${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp`} />
+          <DarkReportMetric label={labels.panels} value={formatNumber(result.roofFitPanelCount)} />
+          <DarkReportMetric label={labels.energy} value={`${formatNumber(result.annualGenerationKWh)} kWh`} />
+          <DarkReportMetric label={labels.range} value={`${formatNumber(lowGenerationKWh)}–${formatNumber(highGenerationKWh)} kWh`} />
+        </div>
+        <p className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-sm leading-6 text-white/70">
+          {labels.note}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProfessionalSolarReport({
+  result,
+  solarInsights,
+  solarSelectionMatch,
+  solarCrossCheck,
+  locale,
+}: {
+  result: QuoteScenarioResult;
+  solarInsights?: GoogleSolarSummary | null;
+  solarSelectionMatch?: SolarSelectionMatchSummary | null;
+  solarCrossCheck: SolarCrossCheckSummary | null;
+  locale: AppLocale;
+}) {
+  const processedDate = (
+    solarInsights as (GoogleSolarSummary & { imageryProcessedDate?: string }) | null | undefined
+  )?.imageryProcessedDate;
+  const quality = solarInsights?.imageryQuality;
+  const isBaseOnly = quality === "BASE";
+  const isMatched = Boolean(solarSelectionMatch?.quoteEligible);
+  const generationLowKWh = result.annualGenerationKWh * 0.9;
+  const generationHighKWh = result.annualGenerationKWh * 1.1;
+  const labels =
+    locale === "zh"
+      ? {
+          title: "专业分析摘要",
+          confirmed: "可作交叉校验",
+          preliminary: "仅作初步参考",
+          quality: "影像等级",
+          imageryDate: "影像采集日（约）",
+          processedDate: "模型处理日",
+          match: "圈选匹配状态",
+          overlap: "完整板位落入圈选",
+          selectedRoof: "圈选可用面积",
+          googleArea: "Google 返回整栋阵列面积（参考）",
+          googleRaw: "Google 原生整栋模型（参考）",
+          ksolar: "KSolar 当前方案",
+          energyRange: "首年发电分析区间",
+          methodology: "方法与边界",
+          methodText: isBaseOnly
+            ? "泰国当前返回 BASE 增强卫星影像。像素等级不是测量精度，不能用整栋 Google 结果替代用户圈选、消防退距、障碍物、结构和电气设计。当前正式容量以圈选屋顶和 KSolar 真实组件规则为准。"
+            : "Google 建筑模型只在通过圈选匹配门槛时用于年发电交叉校验；组件片数、BOM、价格与泰国现金流仍由 KSolar 规则计算。",
+          policy: "泰国政策假设",
+          policyText: `Ft ${THAILAND_ENERGY_POLICY.ft.valueTHBPerKWh.toFixed(4)} THB/kWh（有效至 ${THAILAND_ENERGY_POLICY.ft.validTo}）；住宅余电 ${THAILAND_ENERGY_POLICY.residentialNetBilling.exportRateTHBPerKWh.toFixed(2)} THB/kWh，仅对获批出口计入；获批出口上限 ${THAILAND_ENERGY_POLICY.residentialNetBilling.approvedExportLimitKwAc} kW AC。`,
+          siteRequired: "上线结论仍需现场复测、结构鉴定、电气字符串设计、消防退距和 MEA/PEA 并网批准。",
+          source: "Source: Includes solar data from Google",
+          unavailable: "该点没有可用的 Google Solar 建筑结果；报告采用圈选面积与 KSolar 保守默认值。",
+        }
+      : locale === "th"
+        ? {
+            title: "สรุปการวิเคราะห์เชิงวิชาชีพ",
+            confirmed: "ใช้ตรวจสอบไขว้ได้",
+            preliminary: "อ้างอิงเบื้องต้นเท่านั้น",
+            quality: "ระดับภาพ",
+            imageryDate: "วันที่ภาพโดยประมาณ",
+            processedDate: "วันที่ประมวลผลโมเดล",
+            match: "สถานะตรงกับพื้นที่เลือก",
+            overlap: "รอยแผงอยู่ในพื้นที่เลือกทั้งหมด",
+            selectedRoof: "พื้นที่หลังคาใช้ได้ที่เลือก",
+            googleArea: "พื้นที่แผงทั้งอาคารที่ Google ส่งคืน (อ้างอิง)",
+            googleRaw: "โมเดลทั้งอาคารเดิมของ Google (อ้างอิง)",
+            ksolar: "แผน KSolar ปัจจุบัน",
+            energyRange: "ช่วงพลังงานปีแรก",
+            methodology: "วิธีและข้อจำกัด",
+            methodText: isBaseOnly
+              ? "ประเทศไทยจุดนี้ใช้ภาพดาวเทียมปรับปรุงระดับ BASE ระดับพิกเซลไม่ใช่ความแม่นยำการสำรวจ และห้ามใช้ผลทั้งอาคารแทนพื้นที่ที่ผู้ใช้เลือก ระยะหนีไฟ สิ่งกีดขวาง โครงสร้าง และการออกแบบไฟฟ้า"
+              : "ใช้โมเดลอาคาร Google ตรวจสอบพลังงานเมื่อผ่านเกณฑ์พื้นที่เท่านั้น จำนวนแผง BOM ราคา และกระแสเงินสดไทยคำนวณด้วยกฎ KSolar",
+            policy: "สมมติฐานนโยบายไทย",
+            policyText: `Ft ${THAILAND_ENERGY_POLICY.ft.valueTHBPerKWh.toFixed(4)} บาท/kWh (ถึง ${THAILAND_ENERGY_POLICY.ft.validTo}); ขายไฟส่วนเกินบ้าน ${THAILAND_ENERGY_POLICY.residentialNetBilling.exportRateTHBPerKWh.toFixed(2)} บาท/kWh เฉพาะที่อนุมัติ และส่งออกไม่เกิน ${THAILAND_ENERGY_POLICY.residentialNetBilling.approvedExportLimitKwAc} kW AC`,
+            siteRequired: "ผลสุดท้ายต้องสำรวจหน้างาน ตรวจโครงสร้าง ออกแบบสตริง/ระยะหนีไฟ และได้รับอนุมัติ MEA/PEA",
+            source: "Source: Includes solar data from Google",
+            unavailable: "ไม่มีผลอาคาร Google Solar ที่ใช้ได้สำหรับจุดนี้ รายงานใช้พื้นที่ที่เลือกและสมมติฐานอนุรักษ์นิยมของ KSolar",
+          }
+        : {
+            title: "Professional analysis summary",
+            confirmed: "Usable as cross-check",
+            preliminary: "Preliminary reference only",
+            quality: "Imagery tier",
+            imageryDate: "Approx. imagery date",
+            processedDate: "Model processed",
+            match: "Selection match",
+            overlap: "Complete panel footprints inside selection",
+            selectedRoof: "Selected usable roof",
+            googleArea: "Google returned whole-building array (reference)",
+            googleRaw: "Google native whole-building model (reference)",
+            ksolar: "Current KSolar plan",
+            energyRange: "First-year analysis range",
+            methodology: "Method and boundary",
+            methodText: isBaseOnly
+              ? "This Thai location returns BASE enhanced satellite imagery. Pixel tier is not survey accuracy; a whole-building Google result cannot replace the user selection, setbacks, obstructions, structural review, or electrical design. Formal capacity follows the selected roof and real KSolar module rules."
+              : "Google's building model is used for annual-yield cross-checking only after it passes the selection gate. Panel count, BOM, price, and Thailand cashflow remain KSolar calculations.",
+            policy: "Thailand policy assumptions",
+            policyText: `Ft ${THAILAND_ENERGY_POLICY.ft.valueTHBPerKWh.toFixed(4)} THB/kWh (valid to ${THAILAND_ENERGY_POLICY.ft.validTo}); residential export ${THAILAND_ENERGY_POLICY.residentialNetBilling.exportRateTHBPerKWh.toFixed(2)} THB/kWh only when approved, with an approved ${THAILAND_ENERGY_POLICY.residentialNetBilling.approvedExportLimitKwAc} kW AC export limit.`,
+            siteRequired: "Final design still requires a site survey, structural assessment, string/electrical design, fire setbacks, and MEA/PEA approval.",
+            source: "Source: Includes solar data from Google",
+            unavailable: "No usable Google Solar building result is available for this point. The report uses the selected roof and conservative KSolar defaults.",
+          };
+
+  return (
+    <Card className={isMatched ? "border-emerald-200 bg-emerald-50/40" : "border-amber-200 bg-amber-50/40"}>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Telescope className="size-4 text-primary" aria-hidden="true" />
+            <CardTitle>{labels.title}</CardTitle>
+          </div>
+          <Badge variant="secondary">{isMatched ? labels.confirmed : labels.preliminary}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {!solarInsights ? (
+          <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-white/80 p-4 text-sm leading-6 text-amber-950">
+            <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            {labels.unavailable}
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <ReportMetric label={labels.quality} value={solarInsights.imageryQuality} />
+              <ReportMetric label={labels.imageryDate} value={solarInsights.imageryDate || "N/A"} />
+              <ReportMetric label={labels.processedDate} value={processedDate || "N/A"} />
+              <ReportMetric label={labels.match} value={solarSelectionMatch?.status || "unavailable"} />
+              <ReportMetric
+                label={labels.overlap}
+                value={
+                  solarSelectionMatch?.overlapRatio !== null && solarSelectionMatch?.overlapRatio !== undefined
+                    ? `${formatNumber(solarSelectionMatch.overlapRatio * 100, 0)}%`
+                    : "N/A"
+                }
+              />
+              <ReportMetric label={labels.selectedRoof} value={`${formatNumber(result.usableAreaM2, 1)} m²`} />
+              <ReportMetric label={labels.googleArea} value={`${formatNumber(solarInsights.maxArrayAreaMeters2, 1)} m²`} />
+              <ReportMetric
+                label={labels.googleRaw}
+                value={solarCrossCheck?.googleRawKw != null ? `${formatNumber(solarCrossCheck.googleRawKw, 2)} kWp` : "N/A"}
+              />
+              <ReportMetric label={labels.ksolar} value={`${formatNumber((result.quoteReady ? result.quotedSystemSizeWp : result.roofFitSystemWp) / 1000, 2)} kWp`} />
+              <ReportMetric label={labels.energyRange} value={`${formatNumber(generationLowKWh)}–${formatNumber(generationHighKWh)} kWh`} />
+            </div>
+            <p className="text-xs font-medium text-slate-500">{labels.source}</p>
+          </>
+        )}
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-2xl border border-white/80 bg-white/85 p-4 text-sm leading-6 text-slate-700">
+            <div className="mb-1 flex items-center gap-2 font-semibold text-slate-950">
+              <CircleCheck className="size-4 text-primary" aria-hidden="true" />
+              {labels.methodology}
+            </div>
+            {labels.methodText}
+          </div>
+          <div className="rounded-2xl border border-white/80 bg-white/85 p-4 text-sm leading-6 text-slate-700">
+            <div className="mb-1 font-semibold text-slate-950">{labels.policy}</div>
+            {labels.policyText}
+          </div>
+        </div>
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium leading-6 text-amber-950">
+          {labels.siteRequired}
+        </p>
+        {result.finance.policyWarnings.length > 0 ? (
+          <div className="grid gap-1 text-sm text-amber-900">
+            {result.finance.policyWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReportMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/80 bg-white/85 p-4">
+      <div className="metric-label">{label}</div>
+      <div className="mt-2 text-lg font-semibold tracking-[-0.03em] text-slate-950">{value}</div>
+    </div>
+  );
+}
+
+function DarkReportMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">{label}</div>
+      <div className="mt-2 text-2xl font-semibold tracking-[-0.04em]">{value}</div>
     </div>
   );
 }

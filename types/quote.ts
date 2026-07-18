@@ -2,6 +2,36 @@ import type { BomScenario, CapacityTier, SystemTopology } from "@/types/bom";
 import type { FinanceSelectionSummary } from "@/types/finance";
 import type { GenerationModel } from "@/lib/calc/generation";
 
+export type StandardCapacityKW = 5 | 10 | 15 | 20;
+
+/**
+ * One capacity decision shared by the quote UI and calculation engine.
+ * `roof-potential` is an engineering assessment, not a residential package.
+ */
+export type CapacityIntent =
+  | { mode: "standard"; targetKW: StandardCapacityKW }
+  | { mode: "roof-potential" };
+
+export type QuoteReadiness =
+  | "ready"
+  | "technical-potential-only"
+  | "engineering-review"
+  | "not-viable";
+
+export interface ElectricalCompatibilitySummary {
+  compatible: boolean;
+  inverterId: string;
+  inverterModel: string;
+  dcAcRatio: number;
+  stringCount: number;
+  modulesPerString: number[];
+  maxStringVocV: number;
+  minStringVmpV: number;
+  maxStringVmpV: number;
+  warnings: string[];
+  errors: string[];
+}
+
 export type ShapeKind = "polygon" | "rectangle" | "manual";
 
 export interface LatLngPoint {
@@ -42,8 +72,16 @@ export interface QuoteScenarioInput {
   map: MapSelectionSummary;
   topology: SystemTopology;
   pricingPresetId: PricingPreset["id"];
+  /** Preferred capacity API. `selectedTierId` remains for saved legacy quotes. */
+  capacityIntent?: CapacityIntent | null;
   selectedTierId?: CapacityTier["id"] | null;
   selectedFinanceIds: string[];
+  /** Taxable income after deductions; used only to calculate an eligible tax saving. */
+  taxableIncomeTHB?: number | null;
+  monthlyElectricityBillTHB?: number | null;
+  /** undefined preserves legacy calculations; new quotes should require confirmation. */
+  gridExportApproved?: boolean;
+  approvedExportLimitKwAc?: number;
   ftRateTHBPerKWh: number;
   selfConsumptionRatio: number;
   exportRateTHBPerKWh: number;
@@ -61,6 +99,10 @@ export interface QuoteScenarioInput {
 
 export interface QuoteScenarioResult {
   isViable: boolean;
+  quoteReady: boolean;
+  quoteReadiness: QuoteReadiness;
+  capacityIntent: CapacityIntent | null;
+  engineeringReviewRequired: boolean;
   warnings: string[];
   recommendedTier: CapacityTier | null;
   usableAreaM2: number;
@@ -79,13 +121,19 @@ export interface QuoteScenarioResult {
   annualSelfUseSavingsTHB: number;
   annualExportRevenueTHB: number;
   annualSavingsTHB: number;
+  annualCurtailmentKWh: number;
+  savingsCappedByBill: boolean;
   hardwareCostTHB: number;
   suggestedSellPriceTHB: number;
   finance: FinanceSelectionSummary;
   paybackYears: number | null;
+  discountedPaybackYears: number | null;
   irrPercent: number | null;
+  npvTHB: number;
+  lifetimeNetSavingsTHB: number;
   benchmarkLowTHB?: number;
   benchmarkHighTHB?: number;
   bom: BomScenario | null;
+  electricalCompatibility: ElectricalCompatibilitySummary | null;
   explanation: CalculationExplanation[];
 }

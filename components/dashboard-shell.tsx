@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, LoaderCircle, LogOut, MapPinned, Save, type LucideIcon, Settings2, Sparkles, UserRound } from "lucide-react";
 import { saveCustomerIntakeValue } from "@/app/(sales)/customer-intake/actions";
 import { saveQuote } from "@/app/(sales)/quote/actions";
 import { LocaleProvider, useAppCopy, useLocaleContext } from "@/components/locale-provider";
 import { Map } from "@/components/Map";
 import { CustomerIntakeCard } from "@/components/customer-intake-card";
+import { CapacitySelector } from "@/components/capacity-selector";
 import { FinanceSelector } from "@/components/finance-selector";
 import { QuoteResults } from "@/components/quote-results";
 import { RoofReviewMap } from "@/components/roof-review-map";
@@ -22,7 +23,8 @@ import { calculatePpaReturns } from "@/lib/calc/ppa";
 import { FINANCE_PRODUCTS } from "@/lib/config/finance-products";
 import { filterResidentialInverters } from "@/lib/config/inverter-catalog";
 import { DEFAULT_PANEL_ID, findPanel, getPanelAreaM2 } from "@/lib/config/panel-catalog";
-import { CAPACITY_TIERS, DEFAULT_TOPOLOGY, SOLAR_DEFAULTS } from "@/lib/config/solar";
+import { DEFAULT_TOPOLOGY, SOLAR_DEFAULTS } from "@/lib/config/solar";
+import { THAILAND_ENERGY_POLICY } from "@/lib/config/thailand-energy-policy";
 import {
   getCustomerIntakeCopy,
   initialCustomerIntake,
@@ -35,13 +37,12 @@ import { createEmptyMapSelection, resolveRestoredMapCenter } from "@/lib/maps";
 import { requestSolarDataLayers, requestSolarInsights, SolarApiError } from "@/lib/solar-client";
 import {
   buildSolarSelectionMatchSummary,
-  getGoogleSolarSellableAnnualGeneration,
-  getGoogleSolarSellableFit,
+  getGoogleSolarSelectionPanelUpperBound,
   getSelectionReferencePoint,
   type SellablePanelProfile,
 } from "@/lib/solar";
 import { formatCurrency, formatNumber } from "@/lib/utils";
-import type { MapSelectionSummary, PricingPreset, QuoteScenarioInput } from "@/types/quote";
+import type { CapacityIntent, MapSelectionSummary, PricingPreset, QuoteScenarioInput } from "@/types/quote";
 import type { SaveQuoteState } from "@/types/quote-save";
 import type { CapacityTierId, SystemTopology } from "@/types/bom";
 import type { GoogleSolarDataLayerPaths, GoogleSolarSummary, SolarLatLng } from "@/types/solar";
@@ -94,6 +95,7 @@ function DashboardShellContent() {
   const [selectedInverterId, setSelectedInverterId] = useState<string>("auto");
   const [selectedBatteryId, setSelectedBatteryId] = useState<string>("auto");
   const [selectedTierId, setSelectedTierId] = useState<CapacityTierId | null>(null);
+  const [capacityIntent, setCapacityIntent] = useState<CapacityIntent | null>(null);
   const [customerIntake, setCustomerIntake] = useState(initialCustomerIntake);
   const [customerSaveState, setCustomerSaveState] = useState(initialCustomerIntakeSaveState);
   const [isAutoSavingCustomer, setIsAutoSavingCustomer] = useState(false);
@@ -106,6 +108,8 @@ function DashboardShellContent() {
   const [selectedFinanceIds, setSelectedFinanceIds] = useState(
     FINANCE_PRODUCTS.filter((product) => product.enabledByDefault).map((product) => product.id),
   );
+  const [taxableIncomeTHB, setTaxableIncomeTHB] = useState<number | null>(null);
+  const [gridExportApproved, setGridExportApproved] = useState(false);
   const [activeStep, setActiveStep] = useState<StepNumber>(1);
   const [step3SheetExpanded, setStep3SheetExpanded] = useState(false);
   const [mapFlyoverRequestId, setMapFlyoverRequestId] = useState(0);
@@ -122,6 +126,8 @@ function DashboardShellContent() {
   const [solarDataLayersKey, setSolarDataLayersKey] = useState<string | null>(null);
   const [solarStatus, setSolarStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [solarErrorMessage, setSolarErrorMessage] = useState<string | null>(null);
+  const solarRequestSequenceRef = useRef(0);
+  const latestSolarRequestKeyRef = useRef<string | null>(null);
   const crmEnabled = isSupabaseConfigured();
   const allowCustomerIntakeSkip =
     process.env.NODE_ENV !== "production" ||
@@ -167,40 +173,16 @@ function DashboardShellContent() {
       weightKg: panel?.weightKg ?? null,
     };
   }, [selectedPanelId]);
-  const maxLayout = useMemo(
+  const solarSelectionUpperBound = useMemo(
     () =>
-      calculateMaxLayout({
-        googleMatchedRoof: solarSelectionMatch.status === "inside-selection",
-        googleReference: activeSolarInsights
-          ? {
-              maxArrayAreaM2: activeSolarInsights.maxArrayAreaMeters2,
-              maxConfigPanelCount:
-                activeSolarInsights.maxConfig?.panelsCount ||
-                activeSolarInsights.maxArrayPanelsCount,
-              maxConfigYearlyEnergyKWh:
-                activeSolarInsights.maxConfig?.yearlyEnergyDcKwh,
-              panelCapacityWp: activeSolarInsights.panelCapacityWatts,
-            }
-          : null,
-        manualUsableAreaM2: mapSelection.usableAreaM2,
-        panel: {
-          areaM2: selectedPanelProfile.areaM2,
-          lengthM: selectedPanelProfile.longSideM || 0,
-          powerWp: selectedPanelProfile.powerWp,
-          weightKg: selectedPanelProfile.weightKg ?? null,
-          widthM: selectedPanelProfile.shortSideM || 0,
-        },
-        selectedRoofAreaM2: mapSelection.grossAreaM2,
-      }),
-    [
-      activeSolarInsights,
-      mapSelection.grossAreaM2,
-      mapSelection.usableAreaM2,
-      selectedPanelProfile,
-      solarSelectionMatch.status,
-    ],
+      getGoogleSolarSelectionPanelUpperBound(
+        activeSolarInsights,
+        mapSelection.shapes,
+        selectedPanelProfile,
+      ),
+    [activeSolarInsights, mapSelection.shapes, selectedPanelProfile],
   );
-  const manualWholeRoofLayout = useMemo(
+  const maxLayout = useMemo(
     () =>
       calculateMaxLayout({
         googleMatchedRoof: false,
@@ -221,6 +203,7 @@ function DashboardShellContent() {
       selectedPanelProfile,
     ],
   );
+  const manualWholeRoofLayout = maxLayout;
   const ppaReturns = useMemo(
     () =>
       calculatePpaReturns({
@@ -240,24 +223,35 @@ function DashboardShellContent() {
   );
 
   const quoteScenarioInput = useMemo<QuoteScenarioInput>(() => {
-    const googleSellableFit = getGoogleSolarSellableFit(activeSolarInsights, selectedPanelProfile);
-    const googleSellableAnnualGeneration = getGoogleSolarSellableAnnualGeneration(
-      activeSolarInsights,
-      selectedPanelProfile,
-    );
+    const googleSelectionIsQuoteEligible = Boolean(solarSelectionUpperBound?.quoteEligible);
+    const googleSellableAnnualGeneration =
+      googleSelectionIsQuoteEligible &&
+      solarSelectionUpperBound &&
+      solarSelectionUpperBound.sourceCapacityKw > 0 &&
+      manualWholeRoofLayout.capacityWp > 0
+        ? (solarSelectionUpperBound.sourceYearlyEnergyDcKwh /
+            solarSelectionUpperBound.sourceCapacityKw) *
+          (manualWholeRoofLayout.capacityWp / 1000)
+        : null;
 
     return {
       map: mapSelection,
       topology,
       pricingPresetId,
+      capacityIntent,
       selectedTierId,
       selectedFinanceIds,
+      taxableIncomeTHB,
       ftRateTHBPerKWh,
       selfConsumptionRatio,
       exportRateTHBPerKWh,
-      googleMatchedRoof: solarSelectionMatch.status === "inside-selection",
-      googleSellableFitWp: googleSellableFit.equivalentKw ? googleSellableFit.equivalentKw * 1000 : null,
-      googleSellablePanelCount: googleSellableFit.equivalentPanelCount,
+      monthlyElectricityBillTHB: parseOptionalPositiveNumber(customerIntake.monthlyElectricityBillTHB),
+      gridExportApproved,
+      approvedExportLimitKwAc:
+        THAILAND_ENERGY_POLICY.residentialNetBilling.approvedExportLimitKwAc,
+      googleMatchedRoof: googleSelectionIsQuoteEligible,
+      googleSellableFitWp: null,
+      googleSellablePanelCount: null,
       googleAnnualGenerationKWh: googleSellableAnnualGeneration,
       selectedPanelId,
       selectedInverterId,
@@ -266,25 +260,25 @@ function DashboardShellContent() {
   }, [
     exportRateTHBPerKWh,
     ftRateTHBPerKWh,
+    capacityIntent,
+    customerIntake.monthlyElectricityBillTHB,
+    gridExportApproved,
     mapSelection,
+    manualWholeRoofLayout.capacityWp,
     pricingPresetId,
     selectedFinanceIds,
     selectedTierId,
     selfConsumptionRatio,
-    activeSolarInsights,
-    solarSelectionMatch.status,
+    taxableIncomeTHB,
+    solarSelectionUpperBound,
     topology,
     selectedPanelId,
-    selectedPanelProfile,
     selectedInverterId,
     selectedBatteryId,
   ]);
   const result = useMemo(() => calculateQuoteScenario(quoteScenarioInput), [quoteScenarioInput]);
   const quoteRevisionKey = useMemo(() => JSON.stringify(quoteScenarioInput), [quoteScenarioInput]);
-  const quoteConfigurationKey = useMemo(
-    () => JSON.stringify({ ...quoteScenarioInput, selectedTierId: null }),
-    [quoteScenarioInput],
-  );
+  const quoteConfigurationKey = quoteRevisionKey;
   const step3Done = step2Done && confirmedRevisionKey === quoteConfigurationKey;
   const step4Done =
     step3Done &&
@@ -305,29 +299,6 @@ function DashboardShellContent() {
 
     return () => window.cancelAnimationFrame(focusHandle);
   }, [activeStep]);
-
-  const availableQuoteTiers = useMemo(
-    () =>
-      CAPACITY_TIERS.filter((tier) => {
-        const allowedByPhase =
-          topology.phase === "1P"
-            ? ["3kW", "5kW", "10kW"].includes(tier.id)
-            : ["5kW", "10kW", "15kW", "20kW"].includes(tier.id);
-
-        return allowedByPhase && tier.panelCount <= result.roofFitPanelCount;
-      }),
-    [result.roofFitPanelCount, topology.phase],
-  );
-
-  useEffect(() => {
-    if (!selectedTierId) {
-      return;
-    }
-
-    if (!availableQuoteTiers.some((tier) => tier.id === selectedTierId)) {
-      setSelectedTierId(null);
-    }
-  }, [availableQuoteTiers, selectedTierId]);
 
   const steps = useMemo<WorkflowStepState[]>(
     () => [
@@ -493,9 +464,9 @@ function DashboardShellContent() {
           title: "确认方案",
           eyebrow: "步骤 3 · 系统校准",
           description: "在同一张地图上核对屋顶、Google Solar 和报价容量，只保留现场最常用的调整项。",
-          solarReady: "Google Solar 已匹配",
+          solarReady: "Google Solar 交叉校验通过",
           solarLoading: "Google Solar 分析中",
-          solarWarning: "Google Solar 需复核",
+          solarWarning: "Google Solar 仅供参考",
           solarWaiting: "等待 Google Solar",
           refresh: "刷新校验",
           editRoof: "编辑已选屋顶",
@@ -505,17 +476,17 @@ function DashboardShellContent() {
           recognizedMaxPanels: "已识别可铺",
           recognizedAnnualGeneration: "已识别年发电",
           quoteSize: "报价容量",
-          annualGeneration: "满铺年发电",
+          annualGeneration: "潜力年发电（初筛）",
           payback: "回本周期",
           investment: "总投资",
-          googleMaxPanels: "Google 最大板数",
-          ksolarMaxPanels: "按当前组件可铺",
-          googleModeledArea: "Google 建模屋顶",
+          googleMaxPanels: "Google 圈内完整板位（参考）",
+          ksolarMaxPanels: "KSolar 面积初筛上限",
+          googleModeledArea: "Google 返回整栋屋顶（参考）",
           selectedArea: "你圈选屋顶",
-          maxLayoutTitle: "Max Layout 满铺校验",
+          maxLayoutTitle: "屋顶潜力初筛",
           maxLayoutSourceGoogle: "来源：Google Solar 最大阵列面积",
           maxLayoutSourceGooglePartial: "来源：Google Solar 已识别屋顶，下方不是整栋厂房最大值",
-          maxLayoutSourceManual: "来源：手动画图可用面积",
+          maxLayoutSourceManual: "来源：圈选屋顶面积 × 70% 可用率；不是施工排布图",
           manualWholeRoofEstimate: (panels: string, capacity: string, generation: string) =>
             `按你圈选的完整屋顶粗估约 ${panels} / ${capacity} / ${generation}，但这部分还没有经过 Google 阴影、坡面和障碍物校验。`,
           arrayArea: "可铺阵列面积",
@@ -547,7 +518,7 @@ function DashboardShellContent() {
           advancedFinance: "展开金融和电价",
           advancedFinanceHint: "需要调整 FT、自用比例、上网电价或贷款产品时再打开。",
           ppaTitle: "工厂 PPA 回本",
-          ppaHint: "按上方 Max Layout 发电量计算投资方现金流，不使用住宅 BOM 报价。",
+          ppaHint: "按上方屋顶潜力初筛发电量计算投资方现金流，不使用住宅 BOM 报价。",
           ppaRate: "PPA 售电价",
           ppaCapex: "EPC 单瓦成本",
           ppaOM: "年 O&M",
@@ -563,9 +534,9 @@ function DashboardShellContent() {
             title: "ยืนยันแพ็กเกจ",
             eyebrow: "ขั้นตอน 3 · ปรับระบบ",
             description: "ตรวจหลังคา Google Solar และขนาดระบบบนแผนที่เดียว เหลือเฉพาะตัวเลือกที่ใช้หน้างานจริง",
-            solarReady: "Google Solar ตรงกับหลังคา",
+            solarReady: "ผ่านการตรวจสอบไขว้ Google Solar",
             solarLoading: "กำลังวิเคราะห์ Google Solar",
-            solarWarning: "ควรตรวจ Google Solar",
+            solarWarning: "Google Solar ใช้อ้างอิงเท่านั้น",
             solarWaiting: "รอ Google Solar",
             refresh: "ตรวจใหม่",
             editRoof: "แก้หลังคา",
@@ -575,17 +546,17 @@ function DashboardShellContent() {
             recognizedMaxPanels: "แผงที่ Google เห็น",
             recognizedAnnualGeneration: "ไฟ/ปีที่ Google เห็น",
             quoteSize: "ขนาดระบบ",
-            annualGeneration: "ไฟผลิตสูงสุด/ปี",
+            annualGeneration: "ศักยภาพผลิตไฟ/ปี (เบื้องต้น)",
             payback: "คืนทุน",
             investment: "เงินลงทุน",
-            googleMaxPanels: "แผงสูงสุด Google",
-            ksolarMaxPanels: "เทียบแผงปัจจุบัน",
-            googleModeledArea: "พื้นที่ Google",
+            googleMaxPanels: "แผง Google อยู่ในพื้นที่ทั้งหมด (อ้างอิง)",
+            ksolarMaxPanels: "ขีดบนตามพื้นที่ KSolar",
+            googleModeledArea: "หลังคาทั้งอาคารที่ Google ส่งคืน (อ้างอิง)",
             selectedArea: "พื้นที่ที่เลือก",
-            maxLayoutTitle: "ตรวจ Max Layout",
+            maxLayoutTitle: "คัดกรองศักยภาพหลังคา",
             maxLayoutSourceGoogle: "แหล่งข้อมูล: พื้นที่วางแผงสูงสุดจาก Google Solar",
             maxLayoutSourceGooglePartial: "แหล่งข้อมูล: หลังคาส่วนที่ Google เห็น ไม่ใช่ค่าสูงสุดทั้งโรงงาน",
-            maxLayoutSourceManual: "แหล่งข้อมูล: พื้นที่ใช้งานจากการวาดเอง",
+            maxLayoutSourceManual: "แหล่งข้อมูล: พื้นที่ที่เลือก × ใช้งานได้ 70%; ไม่ใช่แบบติดตั้งก่อสร้าง",
             manualWholeRoofEstimate: (panels: string, capacity: string, generation: string) =>
               `หากประเมินจากพื้นที่ที่เลือกทั้งหมด จะได้ประมาณ ${panels} / ${capacity} / ${generation} แต่ยังไม่ได้ตรวจเงา ความลาด และสิ่งกีดขวางด้วย Google`,
             arrayArea: "พื้นที่แผง",
@@ -617,7 +588,7 @@ function DashboardShellContent() {
             advancedFinance: "การเงินและค่าไฟ",
             advancedFinanceHint: "เปิดเมื่อปรับ FT สัดส่วนใช้เอง ค่าไฟขายคืน หรือสินเชื่อ",
             ppaTitle: "คืนทุน Factory PPA",
-            ppaHint: "คำนวณกระแสเงินสดฝั่งผู้ลงทุนจาก Max Layout ไม่ใช้ราคา BOM บ้าน",
+            ppaHint: "คำนวณกระแสเงินสดจากศักยภาพหลังคาเบื้องต้น ไม่ใช้ราคา BOM บ้าน",
             ppaRate: "ราคา PPA",
             ppaCapex: "ต้นทุน EPC/Wp",
             ppaOM: "O&M ต่อปี",
@@ -632,9 +603,9 @@ function DashboardShellContent() {
             title: "Confirm setup",
             eyebrow: "Step 3 · System calibration",
             description: "Validate the roof, Google Solar signal, and quote size on one map with only field-critical controls.",
-            solarReady: "Google Solar matched",
+            solarReady: "Google Solar cross-check passed",
             solarLoading: "Google Solar analyzing",
-            solarWarning: "Google Solar needs review",
+            solarWarning: "Google Solar reference only",
             solarWaiting: "Waiting for Google Solar",
             refresh: "Refresh check",
             editRoof: "Edit roof",
@@ -644,17 +615,17 @@ function DashboardShellContent() {
             recognizedMaxPanels: "Recognized fit",
             recognizedAnnualGeneration: "Recognized generation",
             quoteSize: "Quote size",
-            annualGeneration: "Max annual generation",
+            annualGeneration: "Potential annual generation (screening)",
             payback: "Payback",
             investment: "Investment",
-            googleMaxPanels: "Google max panels",
-            ksolarMaxPanels: "Current module fit",
-            googleModeledArea: "Google modeled roof",
+            googleMaxPanels: "Fully contained Google refs",
+            ksolarMaxPanels: "KSolar area-screening upper bound",
+            googleModeledArea: "Google returned whole roof (reference)",
             selectedArea: "Selected roof",
-            maxLayoutTitle: "Max layout check",
+            maxLayoutTitle: "Roof-potential screening",
             maxLayoutSourceGoogle: "Source: Google Solar max array area",
             maxLayoutSourceGooglePartial: "Source: Google-recognized roof only, not the whole selected factory roof",
-            maxLayoutSourceManual: "Source: manual usable roof area",
+            maxLayoutSourceManual: "Source: selected roof × 70% usable factor; not a construction layout",
             manualWholeRoofEstimate: (panels: string, capacity: string, generation: string) =>
               `Your full selected roof rough estimate is about ${panels} / ${capacity} / ${generation}, but that part has not been validated by Google shade, pitch, or obstruction data.`,
             arrayArea: "Array area",
@@ -686,7 +657,7 @@ function DashboardShellContent() {
             advancedFinance: "Open finance and tariff",
             advancedFinanceHint: "Use when adjusting FT, self-use, export rate, or loan products.",
             ppaTitle: "Factory PPA payback",
-            ppaHint: "Investor cashflow based on Max Layout generation, not residential BOM pricing.",
+            ppaHint: "Investor cashflow based on roof-potential screening, not residential BOM pricing.",
             ppaRate: "PPA tariff",
             ppaCapex: "EPC cost/Wp",
             ppaOM: "Annual O&M",
@@ -707,11 +678,25 @@ function DashboardShellContent() {
   const solarStateLabel =
     solarStatus === "loading"
       ? step3Copy.solarLoading
-      : activeSolarInsights
+      : activeSolarInsights && solarSelectionMatch.quoteEligible
         ? step3Copy.solarReady
-        : solarErrorMessage
+        : activeSolarInsights || solarErrorMessage
           ? step3Copy.solarWarning
           : step3Copy.solarWaiting;
+  const solarReferenceNotice =
+    activeSolarInsights && !solarSelectionMatch.quoteEligible
+      ? activeSolarInsights.imageryQuality === "BASE" || activeSolarInsights.imageryQuality === "UNKNOWN"
+        ? locale === "zh"
+          ? "当前影像等级只能作远程参考，不会改变正式板数、BOM 或价格。你仍可查看 Google 原生板位与热力图。"
+          : locale === "th"
+            ? "คุณภาพภาพปัจจุบันใช้เป็นข้อมูลอ้างอิงระยะไกลเท่านั้น และจะไม่เปลี่ยนจำนวนแผง BOM หรือราคาอย่างเป็นทางการ"
+            : "This imagery tier is remote reference only and cannot change formal panel count, BOM, or price."
+        : locale === "zh"
+          ? "Google 返回的建筑未通过圈选、面积或单栋校验，因此只作参考；正式容量继续使用你圈选的屋顶。"
+          : locale === "th"
+            ? "อาคารที่ Google ส่งคืนไม่ผ่านเกณฑ์พื้นที่/อาคารเดี่ยว จึงใช้เป็นข้อมูลอ้างอิงเท่านั้น"
+            : "The returned building did not pass the selection, area, or single-building gate, so it remains reference only."
+      : null;
   const quotedSizeValue = result.quotedSystemSizeWp > 0 ? `${formatNumber(result.quotedSystemSizeWp / 1000, 1)} kWp` : "N/A";
   const roofLimitValue = maxLayout.capacityWp > 0 ? `${formatNumber(maxLayout.capacityWp / 1000, 1)} kWp` : "N/A";
   const panelUnit = locale === "zh" ? "片" : locale === "th" ? "แผง" : "pcs";
@@ -785,19 +770,35 @@ function DashboardShellContent() {
   );
   const structuralTone = getStructuralStatusTone(maxLayout.structuralLoadStatus);
 
+  latestSolarRequestKeyRef.current = solarRequestKey;
+
   const fetchSolarData = useCallback(async (requestPoint: SolarLatLng, requestKey: string) => {
+    const requestSequence = ++solarRequestSequenceRef.current;
+    const requestIsCurrent = () =>
+      requestSequence === solarRequestSequenceRef.current &&
+      latestSolarRequestKeyRef.current === requestKey;
+
     setSolarStatus("loading");
     setSolarErrorMessage(null);
 
     try {
       const payload = await requestSolarInsights(requestPoint);
+      if (!requestIsCurrent()) {
+        return;
+      }
       setSolarInsights(payload);
       setSolarInsightsKey(requestKey);
       try {
         const dataLayers = await requestSolarDataLayers(requestPoint);
+        if (!requestIsCurrent()) {
+          return;
+        }
         setSolarDataLayers(dataLayers);
         setSolarDataLayersKey(requestKey);
       } catch (error) {
+        if (!requestIsCurrent()) {
+          return;
+        }
         setSolarDataLayers(null);
         setSolarDataLayersKey(null);
         setSolarErrorMessage(
@@ -810,6 +811,9 @@ function DashboardShellContent() {
       }
       setSolarStatus("success");
     } catch (error) {
+      if (!requestIsCurrent()) {
+        return;
+      }
       setSolarInsights(null);
       setSolarInsightsKey(null);
       setSolarDataLayers(null);
@@ -827,6 +831,7 @@ function DashboardShellContent() {
 
   useEffect(() => {
     if (!solarRequestKey || !solarRequestPoint) {
+      solarRequestSequenceRef.current += 1;
       setSolarInsights(null);
       setSolarInsightsKey(null);
       setSolarDataLayers(null);
@@ -930,6 +935,7 @@ function DashboardShellContent() {
       setSolarStatus("idle");
       setSolarErrorMessage(null);
       setSelectedTierId(null);
+      setCapacityIntent(null);
       setConfirmedRevisionKey(null);
       setSavedRevisionKey(null);
       setQuoteSaveState(null);
@@ -1004,7 +1010,7 @@ function DashboardShellContent() {
   const saveCurrentQuote = async () => {
     const customerId = customerSaveState.customerId;
 
-    if (!customerId || !result.isViable || isSavingQuote) {
+    if (!customerId || !result.quoteReady || isSavingQuote) {
       setQuoteSaveState({
         status: "error",
         code: "invalid_input",
@@ -1280,6 +1286,11 @@ function DashboardShellContent() {
                 selectionMatch={solarSelectionMatch}
                 fallbackCenter={solarRequestPoint}
                 sellablePanelProfile={selectedPanelProfile}
+                selectedPanelCount={
+                  result.capacityIntent?.mode === "standard"
+                    ? result.recommendedTier?.panelCount ?? null
+                    : result.roofFitPanelCount
+                }
                 variant="immersive"
                 onEditRoof={() => setActiveStep(2)}
               />
@@ -1324,7 +1335,7 @@ function DashboardShellContent() {
                           <ChevronLeft className="size-4" />
                           {copy.workflow.back}
                         </Button>
-                        <Button size="lg" disabled={solarStatus === "loading"} onClick={openProposal}>
+                        <Button size="lg" disabled={solarStatus === "loading" || !result.isViable} onClick={openProposal}>
                           {copy.workflow.openProposal}
                           <ChevronRight className="size-4" />
                         </Button>
@@ -1390,11 +1401,20 @@ function DashboardShellContent() {
                           {solarErrorMessage}
                         </p>
                       ) : null}
+                      {solarReferenceNotice ? (
+                        <p className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-5 text-amber-950">
+                          {solarReferenceNotice}
+                        </p>
+                      ) : null}
                       {activeSolarInsights ? (
                         <div className="mt-2 grid grid-cols-2 gap-2">
                           <SetupMetric
                             label={step3Copy.googleMaxPanels}
-                            value={`${formatNumber(activeSolarInsights.maxArrayPanelsCount)} ${panelUnit}`}
+                            value={
+                              solarSelectionUpperBound
+                                ? `${formatNumber(solarSelectionUpperBound.sourcePanelCount)} ${panelUnit}`
+                                : "N/A"
+                            }
                           />
                           <SetupMetric
                             label={step3Copy.ksolarMaxPanels}
@@ -1430,7 +1450,18 @@ function DashboardShellContent() {
                   </div>
 
                   <div className="min-h-0 overflow-y-auto px-3 py-3 sm:p-4">
-                    <div className="grid grid-cols-2 gap-2">
+                    <CapacitySelector
+                      value={capacityIntent ?? result.capacityIntent}
+                      phase={topology.phase}
+                      supportedPanelCount={result.roofFitPanelCount}
+                      panelPowerWp={selectedPanelProfile.powerWp}
+                      onChange={(nextIntent) => {
+                        setCapacityIntent(nextIntent);
+                        setSelectedTierId(null);
+                      }}
+                    />
+
+                    <div className="mt-3 grid grid-cols-2 gap-2">
                         <SetupMetric
                           label={maxPanelLabel}
                           value={maxPanelValue}
@@ -1648,6 +1679,30 @@ function DashboardShellContent() {
                       </summary>
                       <div className="mt-3 grid gap-3">
                         <div className="grid gap-3 rounded-[1rem] border border-slate-200 bg-slate-50/70 p-3">
+                          <div className="grid gap-2">
+                            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                              {locale === "zh" ? "住宅余电售电审批" : locale === "th" ? "อนุมัติขายไฟส่วนเกินบ้าน" : "Residential export approval"}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <SetupChoice
+                                active={!gridExportApproved}
+                                label={locale === "zh" ? "尚未确认" : locale === "th" ? "ยังไม่ยืนยัน" : "Not confirmed"}
+                                onClick={() => setGridExportApproved(false)}
+                              />
+                              <SetupChoice
+                                active={gridExportApproved}
+                                label={locale === "zh" ? "已获电网批准" : locale === "th" ? "ได้รับอนุมัติแล้ว" : "Grid approved"}
+                                onClick={() => setGridExportApproved(true)}
+                              />
+                            </div>
+                            <p className="text-xs font-medium leading-5 text-slate-600">
+                              {locale === "zh"
+                                ? "未确认时不计售电收入。获批住宅项目按 2.20 THB/kWh、最多 5 kW AC 出口作保守估算；这不是组件容量上限。"
+                                : locale === "th"
+                                  ? "หากยังไม่ยืนยัน ระบบจะไม่รวมรายได้ขายไฟ โครงการบ้านที่อนุมัติใช้ 2.20 บาท/kWh และส่งออกไม่เกิน 5 kW AC โดยประมาณ ซึ่งไม่ใช่ขีดจำกัดกำลังแผง"
+                                  : "Unconfirmed export earns no modeled revenue. Approved residential projects use 2.20 THB/kWh and a 5 kW AC export proxy; this is not a PV capacity limit."}
+                            </p>
+                          </div>
                           <BoundedNumberField
                             id="ft-rate"
                             label={copy.tariff.ftRate}
@@ -1676,7 +1731,12 @@ function DashboardShellContent() {
                             onCommit={setExportRateTHBPerKWh}
                           />
                         </div>
-                        <FinanceSelector selectedFinanceIds={selectedFinanceIds} onChange={handleFinanceChange} />
+                        <FinanceSelector
+                          selectedFinanceIds={selectedFinanceIds}
+                          onChange={handleFinanceChange}
+                          taxableIncomeTHB={taxableIncomeTHB}
+                          onTaxableIncomeChange={setTaxableIncomeTHB}
+                        />
                       </div>
                     </details>
                   </div>
@@ -1686,7 +1746,7 @@ function DashboardShellContent() {
                       <ChevronLeft className="size-4" />
                       {copy.workflow.back}
                     </Button>
-                    <Button size="lg" disabled={solarStatus === "loading"} onClick={openProposal}>
+                    <Button size="lg" disabled={solarStatus === "loading" || !result.isViable} onClick={openProposal}>
                       {copy.workflow.openProposal}
                       <ChevronRight className="size-4" />
                     </Button>
@@ -1709,7 +1769,9 @@ function DashboardShellContent() {
                   ? quoteSaveState.quoteCode
                   : result.quotedSystemSizeWp > 0
                     ? `${formatNumber(result.quotedSystemSizeWp / 1000, 1)} kWp`
-                    : "QUOTE"
+                    : result.quoteReadiness === "technical-potential-only" || result.quoteReadiness === "engineering-review"
+                      ? `${formatNumber(result.roofFitSystemWp / 1000, 1)} kWp POTENTIAL`
+                      : "QUOTE"
               }
               footer={
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -1731,7 +1793,7 @@ function DashboardShellContent() {
                       isSavingQuote ||
                       step4Done ||
                       !customerSaveState.customerId ||
-                      !result.isViable
+                      !result.quoteReady
                     }
                     onClick={() => void saveCurrentQuote()}
                   >
@@ -1750,9 +1812,6 @@ function DashboardShellContent() {
                 solarInsights={activeSolarInsights}
                 sellablePanelProfile={selectedPanelProfile}
                 solarSelectionMatch={solarSelectionMatch}
-                availableQuoteTiers={availableQuoteTiers}
-                selectedTierId={selectedTierId}
-                onSelectedTierChange={setSelectedTierId}
               />
             </StageFrame>
           ) : null}
@@ -2006,6 +2065,11 @@ function parseCustomerFocusPoint(value: typeof initialCustomerIntake): SolarLatL
   return { latitude, longitude };
 }
 
+function parseOptionalPositiveNumber(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 function getLocalizedGoogleSolarError(
   locale: AppLocale,
   error: SolarApiError,
@@ -2026,10 +2090,10 @@ function getLocalizedGoogleSolarError(
 
   if (error.code === "quota_exceeded") {
     return locale === "zh"
-      ? `Google Solar ${sourceLabel}今天的 API 配额已用完。报价仍可继续：系统会使用你圈选的屋顶面积和 KSolar 规则引擎计算，等配额恢复或换成正式生产 key 后再做 Google 校验。`
+      ? `Google Solar ${sourceLabel}已达到当前请求频率或项目配额限制。报价仍可继续：系统会使用你圈选的屋顶面积和 KSolar 规则引擎计算；请稍后重试，或在 Google Cloud 检查该项目的 Solar API 配额。`
       : locale === "th"
-        ? `โควตา Google Solar สำหรับ${sourceLabel}วันนี้หมดแล้ว ยังออกใบเสนอราคาได้ โดยใช้พื้นที่หลังคาที่เลือกและสูตร KSolar ก่อน แล้วค่อยตรวจด้วย Google เมื่อโควตากลับมา`
-        : `Google Solar ${sourceLabel} daily quota is exhausted. You can still quote with the selected roof area and KSolar rules, then rerun Google validation after quota resets or a production key is configured.`;
+        ? `Google Solar สำหรับ${sourceLabel}ถึงขีดจำกัดอัตราคำขอหรือโควตาโครงการแล้ว ยังออกใบเสนอราคาได้ด้วยพื้นที่หลังคาที่เลือกและสูตร KSolar โปรดลองใหม่ภายหลังหรือตรวจโควตา Solar API ใน Google Cloud`
+        : `Google Solar ${sourceLabel} reached a request-rate or project-quota limit. You can still quote from the selected roof and KSolar rules; retry later or review the project's Solar API quota in Google Cloud.`;
   }
 
   if (error.code === "billing_required") {

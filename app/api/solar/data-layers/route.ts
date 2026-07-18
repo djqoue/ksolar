@@ -38,7 +38,7 @@ function normalizeDataLayersResponse(
       longitude,
     },
     radiusMeters,
-    imageryQuality: payload.imageryQuality || "BASE",
+    imageryQuality: payload.imageryQuality || "UNKNOWN",
     imageryDate: formatGoogleDate(payload.imageryDate),
     imageryProcessedDate: formatGoogleDate(payload.imageryProcessedDate),
     dsmPath: toProxyPath(extractGeoTiffId(payload.dsmUrl)),
@@ -76,7 +76,9 @@ export async function GET(request: NextRequest) {
   const latitude = latitudeParam?.trim() ? Number(latitudeParam) : Number.NaN;
   const longitude = longitudeParam?.trim() ? Number(longitudeParam) : Number.NaN;
   const radiusMeters = radiusParam === null ? 70 : Number(radiusParam);
-  const requiredQuality = searchParams.get("requiredQuality") || "MEDIUM";
+  const requiredQuality = searchParams.get("requiredQuality") || "BASE";
+  const exactQualityRequiredParam = searchParams.get("exactQualityRequired");
+  const exactQualityRequired = exactQualityRequiredParam === "true";
 
   if (
     !Number.isFinite(latitude) ||
@@ -88,7 +90,10 @@ export async function GET(request: NextRequest) {
     !Number.isFinite(radiusMeters) ||
     radiusMeters <= 0 ||
     radiusMeters > 100 ||
-    !["HIGH", "MEDIUM", "BASE"].includes(requiredQuality)
+    !["HIGH", "MEDIUM", "BASE"].includes(requiredQuality) ||
+    (exactQualityRequiredParam !== null &&
+      exactQualityRequiredParam !== "true" &&
+      exactQualityRequiredParam !== "false")
   ) {
     return NextResponse.json(
       { error: "Valid latitude, longitude, radius, and imagery quality are required." },
@@ -96,45 +101,23 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const qualityCandidates =
-    requiredQuality === "BASE" ? ["BASE"] : [requiredQuality, "BASE"];
+  const url = new URL("https://solar.googleapis.com/v1/dataLayers:get");
+  url.searchParams.set("location.latitude", String(latitude));
+  url.searchParams.set("location.longitude", String(longitude));
+  url.searchParams.set("radiusMeters", String(radiusMeters));
+  url.searchParams.set("view", "FULL_LAYERS");
+  url.searchParams.set("requiredQuality", requiredQuality);
+  url.searchParams.set("exactQualityRequired", String(exactQualityRequired));
+  url.searchParams.set("key", apiKey);
 
-  let response: Response | null = null;
-  let payload: GoogleDataLayersResponse | null = null;
+  const response = await fetch(url.toString(), {
+    headers: {
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
 
-  for (const candidateQuality of qualityCandidates) {
-    const url = new URL("https://solar.googleapis.com/v1/dataLayers:get");
-    url.searchParams.set("location.latitude", String(latitude));
-    url.searchParams.set("location.longitude", String(longitude));
-    url.searchParams.set("radiusMeters", String(radiusMeters));
-    url.searchParams.set("view", "FULL_LAYERS");
-    url.searchParams.set("requiredQuality", candidateQuality);
-    url.searchParams.set("key", apiKey);
-
-    response = await fetch(url.toString(), {
-      headers: {
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
-
-    payload = (await response.json()) as GoogleDataLayersResponse;
-
-    if (response.ok) {
-      break;
-    }
-
-    if (response.status !== 404 || candidateQuality === "BASE") {
-      break;
-    }
-  }
-
-  if (!response || !payload) {
-    return NextResponse.json(
-      { error: "Google Solar dataLayers request did not return a response." },
-      { status: 502 },
-    );
-  }
+  const payload = (await response.json()) as GoogleDataLayersResponse;
 
   if (!response.ok) {
     const apiError = buildGoogleApiErrorPayload({

@@ -32,6 +32,16 @@ export function RoiSummary({ result }: RoiSummaryProps) {
           netMonthly: "月净现金流",
           noLoan: "未选择贷款",
           approvalNote: "贷款为预估，最终以银行审批、抵押物估值、费用和客户资质为准。",
+          npv: "净现值（7%）",
+          discountedPayback: "折现回本",
+          lifetime: "25年净收益",
+          totalInterest: "全期利息",
+          highestPayment: "最高月供",
+          taxPending: "未计入（需应税收入）",
+          curtailment: "弃光/未获批余电",
+          notSelected: "未选择",
+          cashPayment: "现金支付",
+          annualRepayment: "首年预计还款",
         }
       : locale === "th"
         ? {
@@ -53,6 +63,16 @@ export function RoiSummary({ result }: RoiSummaryProps) {
             netMonthly: "เงินสดสุทธิต่อเดือน",
             noLoan: "ไม่ได้เลือกสินเชื่อ",
             approvalNote: "เป็นการประเมินสินเชื่อเบื้องต้น การอนุมัติจริงขึ้นกับธนาคาร หลักประกัน ค่าธรรมเนียม และคุณสมบัติลูกค้า",
+            npv: "NPV (7%)",
+            discountedPayback: "คืนทุนแบบคิดลด",
+            lifetime: "ผลประโยชน์สุทธิ 25 ปี",
+            totalInterest: "ดอกเบี้ยรวม",
+            highestPayment: "ค่างวดสูงสุด",
+            taxPending: "ยังไม่รวม (ต้องกรอกเงินได้สุทธิ)",
+            curtailment: "ไฟส่วนเกิน/ถูกจำกัด",
+            notSelected: "ไม่ได้เลือก",
+            cashPayment: "ชำระเงินสด",
+            annualRepayment: "ยอดผ่อนโดยประมาณปีแรก",
           }
         : {
             totalInvestment: "Total investment",
@@ -73,6 +93,16 @@ export function RoiSummary({ result }: RoiSummaryProps) {
           netMonthly: "Net monthly cashflow",
           noLoan: "No loan selected",
           approvalNote: "Loan terms are estimates. Final approval depends on bank review, collateral value, fees, and customer credit profile.",
+          npv: "NPV (7%)",
+          discountedPayback: "Discounted payback",
+          lifetime: "25-year net benefit",
+          totalInterest: "Total interest",
+          highestPayment: "Highest payment",
+          taxPending: "Not included (taxable income required)",
+          curtailment: "Curtailed/unapproved surplus",
+          notSelected: "Not selected",
+          cashPayment: "Cash payment",
+          annualRepayment: "Estimated first-year repayment",
         };
 
   const annualPaymentTHB = result.finance.monthlyPaymentTHB ? result.finance.monthlyPaymentTHB * 12 : 0;
@@ -83,6 +113,9 @@ export function RoiSummary({ result }: RoiSummaryProps) {
   const maxBarValue = Math.max(monthlyBenefitTHB, result.finance.monthlyPaymentTHB || 0, 1);
   const monthlySavingsWidth = `${Math.max(8, (monthlyBenefitTHB / maxBarValue) * 100)}%`;
   const monthlyPaymentWidth = `${Math.max(result.finance.monthlyPaymentTHB ? 8 : 0, ((result.finance.monthlyPaymentTHB || 0) / maxBarValue) * 100)}%`;
+  const taxDeductionSelected = result.finance.appliedProducts.some(
+    (product) => product.type === "tax_deduction" || product.type === "tax_credit",
+  );
 
   return (
     <Card className="overflow-hidden border-slate-950 bg-slate-950 text-white">
@@ -105,7 +138,7 @@ export function RoiSummary({ result }: RoiSummaryProps) {
           <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.06] p-4 sm:p-5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">{label.payback}</div>
             <div className="mt-2 text-4xl font-semibold tracking-[-0.06em]">
-              {result.paybackYears ? `${formatNumber(result.paybackYears, 1)}y` : "N/A"}
+              {result.paybackYears !== null ? `${formatNumber(result.paybackYears, 1)}y` : "N/A"}
             </div>
           </div>
           <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.06] p-4 sm:p-5">
@@ -117,7 +150,7 @@ export function RoiSummary({ result }: RoiSummaryProps) {
         <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.06] p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">{label.cashflow}</div>
-            <div className="text-sm text-white/65">IRR {result.irrPercent ? formatPercent(result.irrPercent, 1) : "N/A"}</div>
+            <div className="text-sm text-white/65">IRR {result.irrPercent !== null ? formatPercent(result.irrPercent, 1) : "N/A"}</div>
           </div>
           <div className="mt-5 grid gap-4">
             <CashflowBar label={label.benefit} value={formatCurrency(monthlyBenefitTHB)} width={monthlySavingsWidth} tone="bg-emerald-300" />
@@ -135,18 +168,49 @@ export function RoiSummary({ result }: RoiSummaryProps) {
             </div>
           </div>
           <div className="mt-5 grid gap-2 text-sm text-white/72">
-            <FinanceLine label={label.downPayment} value={formatCurrency(result.finance.downPaymentTHB)} />
+            <FinanceLine
+              label={result.finance.monthlyPaymentTHB ? label.downPayment : label.cashPayment}
+              value={formatCurrency(result.finance.downPaymentTHB)}
+            />
             <FinanceLine label={label.loanAmount} value={formatCurrency(result.finance.financedPrincipalTHB)} />
+            <FinanceLine label={label.netPrice} value={formatCurrency(result.finance.financeAdjustedPriceTHB)} />
             <FinanceLine label={label.selfUse} value={`${formatCurrency(monthlySelfUseSavingsTHB)} / mo`} />
             <FinanceLine label={label.export} value={`${formatCurrency(monthlyExportRevenueTHB)} / mo`} />
-            <FinanceLine label={label.taxBenefit} value={formatCurrency(result.finance.taxCreditTHB)} />
+            <FinanceLine
+              label={label.taxBenefit}
+              value={
+                !taxDeductionSelected
+                  ? label.notSelected
+                  : result.finance.taxBenefitConfirmed
+                    ? formatCurrency(result.finance.taxCreditTHB)
+                    : label.taxPending
+              }
+            />
             <FinanceLine label={label.subsidy} value={formatCurrency(result.finance.totalSubsidyTHB)} />
+            <FinanceLine label={label.npv} value={formatCurrency(result.npvTHB)} />
+            <FinanceLine
+              label={label.discountedPayback}
+              value={result.discountedPaybackYears !== null ? `${formatNumber(result.discountedPaybackYears, 1)}y` : "N/A"}
+            />
+            <FinanceLine label={label.lifetime} value={formatCurrency(result.lifetimeNetSavingsTHB)} />
+            <FinanceLine label={label.totalInterest} value={formatCurrency(result.finance.totalInterestTHB)} />
+            {result.finance.highestMonthlyPaymentTHB ? (
+              <FinanceLine label={label.highestPayment} value={formatCurrency(result.finance.highestMonthlyPaymentTHB)} />
+            ) : null}
+            {result.annualCurtailmentKWh > 0 ? (
+              <FinanceLine label={label.curtailment} value={`${formatNumber(result.annualCurtailmentKWh)} kWh/yr`} />
+            ) : null}
           </div>
           {result.finance.monthlyPaymentTHB ? (
             <p className="mt-4 text-xs leading-5 text-white/45">
               {label.approvalNote}
-              {annualPaymentTHB > 0 ? ` Annual repayment estimate: ${formatCurrency(annualPaymentTHB)}.` : ""}
+              {annualPaymentTHB > 0 ? ` ${label.annualRepayment}: ${formatCurrency(annualPaymentTHB)}.` : ""}
             </p>
+          ) : null}
+          {result.finance.policyWarnings.length > 0 ? (
+            <div className="mt-4 grid gap-1 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">
+              {result.finance.policyWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+            </div>
           ) : null}
         </div>
       </CardContent>

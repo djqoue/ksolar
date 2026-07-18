@@ -1,18 +1,17 @@
 import type { GoogleSolarDataLayerPaths, GoogleSolarSummary, SolarLatLng } from "@/types/solar";
 import type { GoogleApiErrorCode } from "@/lib/google-api-errors";
 
-const SOLAR_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const inFlightInsightRequests = new Map<string, Promise<GoogleSolarSummary>>();
+const inFlightDataLayerRequests = new Map<
+  string,
+  Promise<GoogleSolarDataLayerPaths>
+>();
 
 interface SolarApiErrorResponse {
   error?: string;
   status?: string | number | null;
   code?: GoogleApiErrorCode;
   quotaExceeded?: boolean;
-}
-
-interface CachedSolarPayload<T> {
-  savedAt: number;
-  value: T;
 }
 
 export class SolarApiError extends Error {
@@ -28,48 +27,8 @@ export class SolarApiError extends Error {
   }
 }
 
-function buildSolarCacheKey(kind: "insights" | "data-layers", requestPoint: SolarLatLng) {
-  return `ksolar:google-solar:${kind}:${requestPoint.latitude.toFixed(5)}:${requestPoint.longitude.toFixed(5)}`;
-}
-
-function readSolarCache<T>(key: string, allowExpired = false): T | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) {
-      return null;
-    }
-
-    const cached = JSON.parse(raw) as CachedSolarPayload<T>;
-    if (!allowExpired && Date.now() - cached.savedAt > SOLAR_CACHE_TTL_MS) {
-      return null;
-    }
-
-    return cached.value;
-  } catch {
-    return null;
-  }
-}
-
-function writeSolarCache<T>(key: string, value: T) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(
-      key,
-      JSON.stringify({
-        savedAt: Date.now(),
-        value,
-      } satisfies CachedSolarPayload<T>),
-    );
-  } catch {
-    // Cache is best-effort only; quota protection should never block quoting.
-  }
+function buildSolarRequestKey(requestPoint: SolarLatLng) {
+  return `${requestPoint.latitude.toFixed(6)}:${requestPoint.longitude.toFixed(6)}`;
 }
 
 async function readJson<T>(response: Response) {
@@ -91,55 +50,67 @@ function throwSolarApiError(response: Response, payload: SolarApiErrorResponse):
 }
 
 export async function requestSolarInsights(requestPoint: SolarLatLng) {
-  const cacheKey = buildSolarCacheKey("insights", requestPoint);
-  const cached = readSolarCache<GoogleSolarSummary>(cacheKey);
-  if (cached) {
-    return cached;
+  const requestKey = buildSolarRequestKey(requestPoint);
+  const existing = inFlightInsightRequests.get(requestKey);
+  if (existing) {
+    return existing;
   }
 
-  const response = await fetch(
-    `/api/solar/building-insights?latitude=${requestPoint.latitude}&longitude=${requestPoint.longitude}&requiredQuality=MEDIUM`,
-  );
+  const promise = (async () => {
+    const response = await fetch(
+      `/api/solar/building-insights?latitude=${requestPoint.latitude}&longitude=${requestPoint.longitude}&requiredQuality=BASE&exactQualityRequired=false`,
+      { cache: "no-store" },
+    );
 
-  const payload = await readJson<GoogleSolarSummary>(response);
+    const payload = await readJson<GoogleSolarSummary>(response);
 
-  if (!response.ok) {
-    const staleCached = readSolarCache<GoogleSolarSummary>(cacheKey, true);
-    if (payload.quotaExceeded && staleCached) {
-      return staleCached;
+    if (!response.ok) {
+      throwSolarApiError(response, payload);
     }
 
-    throwSolarApiError(response, payload);
+    return payload;
+  })();
+
+  inFlightInsightRequests.set(requestKey, promise);
+
+  try {
+    return await promise;
+  } finally {
+    if (inFlightInsightRequests.get(requestKey) === promise) {
+      inFlightInsightRequests.delete(requestKey);
+    }
   }
-
-  writeSolarCache(cacheKey, payload);
-
-  return payload;
 }
 
 export async function requestSolarDataLayers(requestPoint: SolarLatLng) {
-  const cacheKey = buildSolarCacheKey("data-layers", requestPoint);
-  const cached = readSolarCache<GoogleSolarDataLayerPaths>(cacheKey);
-  if (cached) {
-    return cached;
+  const requestKey = buildSolarRequestKey(requestPoint);
+  const existing = inFlightDataLayerRequests.get(requestKey);
+  if (existing) {
+    return existing;
   }
 
-  const response = await fetch(
-    `/api/solar/data-layers?latitude=${requestPoint.latitude}&longitude=${requestPoint.longitude}&radiusMeters=70&requiredQuality=MEDIUM`,
-  );
+  const promise = (async () => {
+    const response = await fetch(
+      `/api/solar/data-layers?latitude=${requestPoint.latitude}&longitude=${requestPoint.longitude}&radiusMeters=70&requiredQuality=BASE&exactQualityRequired=false`,
+      { cache: "no-store" },
+    );
 
-  const payload = await readJson<GoogleSolarDataLayerPaths>(response);
+    const payload = await readJson<GoogleSolarDataLayerPaths>(response);
 
-  if (!response.ok) {
-    const staleCached = readSolarCache<GoogleSolarDataLayerPaths>(cacheKey, true);
-    if (payload.quotaExceeded && staleCached) {
-      return staleCached;
+    if (!response.ok) {
+      throwSolarApiError(response, payload);
     }
 
-    throwSolarApiError(response, payload);
+    return payload;
+  })();
+
+  inFlightDataLayerRequests.set(requestKey, promise);
+
+  try {
+    return await promise;
+  } finally {
+    if (inFlightDataLayerRequests.get(requestKey) === promise) {
+      inFlightDataLayerRequests.delete(requestKey);
+    }
   }
-
-  writeSolarCache(cacheKey, payload);
-
-  return payload;
 }
