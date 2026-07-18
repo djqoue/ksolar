@@ -12,6 +12,7 @@ import { buildSolarDataLayerAnalysis } from "@/lib/solar-raster";
 import { formatNumber } from "@/lib/utils";
 import {
   buildGoogleSolarPanelFootprints,
+  buildSellableSolarPanelFootprints,
   isSolarPointInsideSelection,
   type SellablePanelProfile,
   type SolarSelectionMatchSummary,
@@ -70,7 +71,8 @@ export function RoofReviewMap({
   const [isAnalyzingLayers, setIsAnalyzingLayers] = useState(false);
   const [visibleLayers, setVisibleLayers] = useState({
     annualFlux: true,
-    panelArray: true,
+    maxLayout: true,
+    panelArray: false,
     selectedRoof: true,
     googleBoundary: true,
     roofSegments: false,
@@ -80,6 +82,7 @@ export function RoofReviewMap({
       ? {
           title: "图层",
           annualFlux: "热力图",
+          maxLayout: "满铺布局",
           panelArray: "板阵列",
           selectedRoof: "圈选屋顶",
           googleBoundary: "Google边界",
@@ -95,8 +98,9 @@ export function RoofReviewMap({
       : locale === "th"
         ? {
             title: "เลเยอร์",
-            annualFlux: "ความร้อน",
-            panelArray: "แผง",
+          annualFlux: "ความร้อน",
+          maxLayout: "วางเต็ม",
+          panelArray: "แผง",
             selectedRoof: "หลังคาที่เลือก",
             googleBoundary: "ขอบ Google",
             roofSegments: "หน้าหลังคา",
@@ -111,6 +115,7 @@ export function RoofReviewMap({
         : {
             title: "Layers",
             annualFlux: "Heatmap",
+            maxLayout: "Max layout",
             panelArray: "Panels",
             selectedRoof: "Selection",
             googleBoundary: "Google edge",
@@ -219,6 +224,14 @@ export function RoofReviewMap({
 
     return { inside, outside, rendered: panels.length, total: allPanels.length };
   }, [selection.shapes, solarInsights]);
+  const maxLayoutOverlay = useMemo(() => {
+    const allPanels = buildSellableSolarPanelFootprints(solarInsights, sellablePanelProfile);
+    const panels = allPanels.slice(0, MAX_RENDERED_PANEL_FOOTPRINTS);
+    const inside = panels.filter((panel) => isSolarPointInsideSelection(panel.center, selection.shapes));
+    const outside = panels.filter((panel) => !isSolarPointInsideSelection(panel.center, selection.shapes));
+
+    return { inside, outside, rendered: panels.length, total: allPanels.length };
+  }, [selection.shapes, sellablePanelProfile, solarInsights]);
   const sellableMaxPanelCount =
     solarInsights?.maxArrayAreaMeters2 && sellablePanelProfile?.areaM2
       ? Math.floor(solarInsights.maxArrayAreaMeters2 / sellablePanelProfile.areaM2)
@@ -251,9 +264,9 @@ export function RoofReviewMap({
         <PanelCapacityStat
           label={layerLabels.shownPanels}
           value={
-            panelOverlay.rendered === panelOverlay.total
-              ? `${formatNumber(panelOverlay.rendered)} ${panelUnit}`
-              : `${formatNumber(panelOverlay.rendered)} / ${formatNumber(panelOverlay.total)}`
+            maxLayoutOverlay.rendered === maxLayoutOverlay.total
+              ? `${formatNumber(maxLayoutOverlay.rendered)} ${panelUnit}`
+              : `${formatNumber(maxLayoutOverlay.rendered)} / ${formatNumber(maxLayoutOverlay.total)}`
           }
           hint={solarInsights.imageryQuality}
         />
@@ -362,6 +375,13 @@ export function RoofReviewMap({
         onClick={() => setVisibleLayers((current) => ({ ...current, annualFlux: !current.annualFlux }))}
       />
       <LayerToggle
+        active={visibleLayers.maxLayout}
+        disabled={!maxLayoutOverlay.total}
+        label={layerLabels.maxLayout}
+        icon={<Grid2X2 className="size-3.5" />}
+        onClick={() => setVisibleLayers((current) => ({ ...current, maxLayout: !current.maxLayout }))}
+      />
+      <LayerToggle
         active={visibleLayers.panelArray}
         disabled={!solarInsights?.solarPanels.length}
         label={layerLabels.panelArray}
@@ -433,7 +453,7 @@ export function RoofReviewMap({
               streetViewControl: false,
               mapTypeControl: false,
               clickableIcons: false,
-              keyboardShortcuts: false,
+              keyboardShortcuts: true,
               gestureHandling: "greedy",
             }}
           >
@@ -517,9 +537,9 @@ export function RoofReviewMap({
                     options={{
                       clickable: false,
                       fillColor: "#f59e0b",
-                      fillOpacity: 0.2,
+                      fillOpacity: 0.14,
                       strokeColor: "#f59e0b",
-                      strokeOpacity: 0.45,
+                      strokeOpacity: 0.34,
                       strokeWeight: 1,
                       zIndex: 4,
                     }}
@@ -533,11 +553,47 @@ export function RoofReviewMap({
                     options={{
                       clickable: false,
                       fillColor: "#14b8a6",
-                      fillOpacity: 0.72,
-                      strokeColor: "#f8fafc",
-                      strokeOpacity: 0.72,
+                      fillOpacity: 0.26,
+                      strokeColor: "#0f766e",
+                      strokeOpacity: 0.56,
                       strokeWeight: 1,
                       zIndex: 5,
+                    }}
+                  />
+                ))}
+              </>
+            ) : null}
+
+            {visibleLayers.maxLayout ? (
+              <>
+                {maxLayoutOverlay.outside.map((panel) => (
+                  <GoogleMapPolygon
+                    key={`review-max-panel-outside-${panel.id}`}
+                    path={panel.path}
+                    options={{
+                      clickable: false,
+                      fillColor: "#f59e0b",
+                      fillOpacity: 0.22,
+                      strokeColor: "#f59e0b",
+                      strokeOpacity: 0.58,
+                      strokeWeight: 1,
+                      zIndex: 6,
+                    }}
+                  />
+                ))}
+
+                {maxLayoutOverlay.inside.map((panel) => (
+                  <GoogleMapPolygon
+                    key={`review-max-panel-inside-${panel.id}`}
+                    path={panel.path}
+                    options={{
+                      clickable: false,
+                      fillColor: "#2dd4bf",
+                      fillOpacity: 0.76,
+                      strokeColor: "#ecfeff",
+                      strokeOpacity: 0.82,
+                      strokeWeight: 1,
+                      zIndex: 7,
                     }}
                   />
                 ))}
@@ -701,6 +757,13 @@ export function RoofReviewMap({
                 onClick={() => setVisibleLayers((current) => ({ ...current, annualFlux: !current.annualFlux }))}
               />
               <LayerToggle
+                active={visibleLayers.maxLayout}
+                disabled={!maxLayoutOverlay.total}
+                label={layerLabels.maxLayout}
+                icon={<Grid2X2 className="size-3.5" />}
+                onClick={() => setVisibleLayers((current) => ({ ...current, maxLayout: !current.maxLayout }))}
+              />
+              <LayerToggle
                 active={visibleLayers.panelArray}
                 disabled={!solarInsights?.solarPanels.length}
                 label={layerLabels.panelArray}
@@ -747,7 +810,7 @@ export function RoofReviewMap({
                 streetViewControl: false,
                 mapTypeControl: false,
                 clickableIcons: false,
-                keyboardShortcuts: false,
+                keyboardShortcuts: true,
               }}
             >
               {visibleLayers.annualFlux && dataLayerAnalysis?.annualFluxOverlay ? (
@@ -829,9 +892,9 @@ export function RoofReviewMap({
                       options={{
                         clickable: false,
                         fillColor: "#f59e0b",
-                        fillOpacity: 0.2,
+                        fillOpacity: 0.14,
                         strokeColor: "#f59e0b",
-                        strokeOpacity: 0.45,
+                        strokeOpacity: 0.34,
                         strokeWeight: 1,
                         zIndex: 4,
                       }}
@@ -845,11 +908,47 @@ export function RoofReviewMap({
                       options={{
                         clickable: false,
                         fillColor: "#14b8a6",
-                        fillOpacity: 0.72,
-                        strokeColor: "#f8fafc",
-                        strokeOpacity: 0.72,
+                        fillOpacity: 0.26,
+                        strokeColor: "#0f766e",
+                        strokeOpacity: 0.56,
                         strokeWeight: 1,
                         zIndex: 5,
+                      }}
+                    />
+                  ))}
+                </>
+              ) : null}
+
+              {visibleLayers.maxLayout ? (
+                <>
+                  {maxLayoutOverlay.outside.map((panel) => (
+                    <GoogleMapPolygon
+                      key={`review-max-panel-outside-${panel.id}`}
+                      path={panel.path}
+                      options={{
+                        clickable: false,
+                        fillColor: "#f59e0b",
+                        fillOpacity: 0.22,
+                        strokeColor: "#f59e0b",
+                        strokeOpacity: 0.58,
+                        strokeWeight: 1,
+                        zIndex: 6,
+                      }}
+                    />
+                  ))}
+
+                  {maxLayoutOverlay.inside.map((panel) => (
+                    <GoogleMapPolygon
+                      key={`review-max-panel-inside-${panel.id}`}
+                      path={panel.path}
+                      options={{
+                        clickable: false,
+                        fillColor: "#2dd4bf",
+                        fillOpacity: 0.76,
+                        strokeColor: "#ecfeff",
+                        strokeOpacity: 0.82,
+                        strokeWeight: 1,
+                        zIndex: 7,
                       }}
                     />
                   ))}
@@ -902,12 +1001,13 @@ function LayerToggle({
   return (
     <button
       type="button"
+      aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
       className={
         active
-          ? "inline-flex h-8 items-center justify-center gap-1.5 rounded-xl bg-slate-950 px-2 text-[11px] font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400"
-          : "inline-flex h-8 items-center justify-center gap-1.5 rounded-xl bg-slate-100 px-2 text-[11px] font-semibold text-slate-700 disabled:text-slate-400"
+          ? "inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl bg-slate-950 px-3 text-xs font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400"
+          : "inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl bg-slate-100 px-3 text-xs font-semibold text-slate-700 disabled:text-slate-400"
       }
     >
       {icon}
@@ -927,11 +1027,11 @@ function PanelCapacityStat({
 }) {
   return (
     <div className="min-w-0 rounded-[0.8rem] bg-white/[0.08] px-2 py-1.5">
-      <div className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-white/46">
+      <div className="text-[11px] font-semibold uppercase leading-4 tracking-[0.1em] text-white/60">
         {label}
       </div>
-      <div className="mt-0.5 truncate text-xs font-semibold text-white">{value}</div>
-      {hint ? <div className="mt-0.5 truncate text-[10px] font-medium text-white/50">{hint}</div> : null}
+      <div className="mt-0.5 text-sm font-semibold leading-5 text-white">{value}</div>
+      {hint ? <div className="mt-0.5 text-xs font-medium leading-4 text-white/60">{hint}</div> : null}
     </div>
   );
 }

@@ -4,7 +4,10 @@ import type { GoogleSolarSummary, SolarLatLng, SolarPanelFootprint } from "@/typ
 
 export interface SellablePanelProfile {
   areaM2: number;
+  longSideM?: number;
   powerWp: number;
+  shortSideM?: number;
+  weightKg?: number | null;
 }
 
 function resolveSellablePanelProfile(profile?: Partial<SellablePanelProfile>): SellablePanelProfile {
@@ -491,6 +494,64 @@ export function buildGoogleSolarPanelFootprints(
 
     return {
       id: `google-panel-${panel.segmentIndex}-${index}`,
+      center: panel.center,
+      segmentIndex: panel.segmentIndex,
+      orientation: panel.orientation,
+      yearlyEnergyDcKwh: panel.yearlyEnergyDcKwh,
+      azimuthDegrees,
+      path: corners.map((corner) => ({
+        lat: corner.latitude,
+        lng: corner.longitude,
+      })),
+    };
+  });
+}
+
+export function buildSellableSolarPanelFootprints(
+  insights?: GoogleSolarSummary | null,
+  profile?: Partial<SellablePanelProfile>,
+): SolarPanelFootprint[] {
+  if (!insights) {
+    return [];
+  }
+
+  const sellablePanel = resolveSellablePanelProfile(profile);
+  const panelHeightMeters =
+    profile?.longSideM && profile.longSideM > 0
+      ? profile.longSideM
+      : Math.sqrt(sellablePanel.areaM2 * 2);
+  const panelWidthMeters =
+    profile?.shortSideM && profile.shortSideM > 0
+      ? profile.shortSideM
+      : sellablePanel.areaM2 / panelHeightMeters;
+  const maxPanelCount =
+    insights.maxArrayAreaMeters2 > 0 && sellablePanel.areaM2 > 0
+      ? Math.floor(insights.maxArrayAreaMeters2 / sellablePanel.areaM2)
+      : 0;
+
+  if (maxPanelCount <= 0 || panelHeightMeters <= 0 || panelWidthMeters <= 0) {
+    return [];
+  }
+
+  const segmentAzimuth = new Map(
+    insights.roofSegments.map((segment) => [segment.segmentIndex, segment.azimuthDegrees]),
+  );
+  const rankedPanels = [...insights.solarPanels]
+    .sort((left, right) => right.yearlyEnergyDcKwh - left.yearlyEnergyDcKwh)
+    .slice(0, maxPanelCount);
+
+  return rankedPanels.map((panel, index) => {
+    const azimuthDegrees = segmentAzimuth.get(panel.segmentIndex) ?? 180;
+    const corners = panelCornersFromCenter({
+      center: panel.center,
+      azimuthDegrees,
+      orientation: panel.orientation,
+      panelHeightMeters,
+      panelWidthMeters,
+    });
+
+    return {
+      id: `sellable-panel-${panel.segmentIndex}-${index}`,
       center: panel.center,
       segmentIndex: panel.segmentIndex,
       orientation: panel.orientation,

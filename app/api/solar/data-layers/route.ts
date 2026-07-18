@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RUNTIME_FALLBACKS } from "@/lib/config/runtime-fallbacks";
 import { buildGoogleApiErrorPayload } from "@/lib/google-api-errors";
+import { requireAuthenticatedApiUser } from "@/lib/server/api-auth";
 import { extractGeoTiffId, formatGoogleDate } from "@/lib/solar";
 import type { GoogleSolarDataLayerPaths } from "@/types/solar";
 
@@ -54,6 +55,12 @@ function normalizeDataLayersResponse(
 }
 
 export async function GET(request: NextRequest) {
+  const authError = await requireAuthenticatedApiUser();
+
+  if (authError) {
+    return authError;
+  }
+
   const apiKey = process.env.GOOGLE_SOLAR_API_KEY || RUNTIME_FALLBACKS.googleSolarApiKey;
   if (!apiKey) {
     return NextResponse.json(
@@ -63,14 +70,28 @@ export async function GET(request: NextRequest) {
   }
 
   const searchParams = request.nextUrl.searchParams;
-  const latitude = Number(searchParams.get("latitude"));
-  const longitude = Number(searchParams.get("longitude"));
-  const radiusMeters = Number(searchParams.get("radiusMeters") || "70");
+  const latitudeParam = searchParams.get("latitude");
+  const longitudeParam = searchParams.get("longitude");
+  const radiusParam = searchParams.get("radiusMeters");
+  const latitude = latitudeParam?.trim() ? Number(latitudeParam) : Number.NaN;
+  const longitude = longitudeParam?.trim() ? Number(longitudeParam) : Number.NaN;
+  const radiusMeters = radiusParam === null ? 70 : Number(radiusParam);
   const requiredQuality = searchParams.get("requiredQuality") || "MEDIUM";
 
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180 ||
+    !Number.isFinite(radiusMeters) ||
+    radiusMeters <= 0 ||
+    radiusMeters > 100 ||
+    !["HIGH", "MEDIUM", "BASE"].includes(requiredQuality)
+  ) {
     return NextResponse.json(
-      { error: "Both latitude and longitude are required." },
+      { error: "Valid latitude, longitude, radius, and imagery quality are required." },
       { status: 400 },
     );
   }

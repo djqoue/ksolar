@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RUNTIME_FALLBACKS } from "@/lib/config/runtime-fallbacks";
 import { buildGoogleApiErrorPayload } from "@/lib/google-api-errors";
+import { requireAuthenticatedApiUser } from "@/lib/server/api-auth";
 
 export async function GET(request: NextRequest) {
+  const authError = await requireAuthenticatedApiUser();
+
+  if (authError) {
+    return authError;
+  }
+
   const apiKey = process.env.GOOGLE_SOLAR_API_KEY || RUNTIME_FALLBACKS.googleSolarApiKey;
   if (!apiKey) {
     return NextResponse.json(
@@ -11,9 +18,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const id = request.nextUrl.searchParams.get("id");
+  const id = request.nextUrl.searchParams.get("id")?.trim();
 
-  if (!id) {
+  if (!id || id.length > 2048) {
     return NextResponse.json(
       { error: "GeoTIFF id is required." },
       { status: 400 },
@@ -56,12 +63,13 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-
-  return new NextResponse(arrayBuffer, {
+  return new NextResponse(response.body, {
     headers: {
       "Content-Type": response.headers.get("Content-Type") || "image/tiff",
       "Cache-Control": "no-store",
+      ...(response.headers.get("Content-Length")
+        ? { "Content-Length": response.headers.get("Content-Length")! }
+        : {}),
     },
   });
 }

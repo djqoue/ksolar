@@ -15,9 +15,10 @@ interface LoginFormsProps {
   configured: boolean;
   defaultDialCode: string;
   locale: AppLocale;
+  signupEnabled: boolean;
 }
 
-export function LoginForms({ configured, defaultDialCode, locale }: LoginFormsProps) {
+export function LoginForms({ configured, defaultDialCode, locale, signupEnabled }: LoginFormsProps) {
   const copy = getAuthCopy(locale);
   const [signInState, signInAction] = useActionState(signInWithEmailPassword, initialAuthActionState);
   const [signUpState, signUpAction] = useActionState(signUpWithEmailPassword, initialAuthActionState);
@@ -58,76 +59,80 @@ export function LoginForms({ configured, defaultDialCode, locale }: LoginFormsPr
         </CardContent>
       </Card>
 
-      <Card className="border-white/75 bg-white/90">
-        <CardHeader>
-          <CardTitle>{copy.forms.signUpTitle}</CardTitle>
-          <CardDescription>{copy.forms.signUpDescription}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form action={signUpAction} className="grid gap-4" noValidate>
-            <input type="hidden" name="locale" value={locale} />
-            <ActionBanner state={signUpState} />
-            <div className="grid gap-2">
-              <Label htmlFor="signup-name">{copy.forms.displayName}</Label>
-              <Input
-                id="signup-name"
-                name="displayName"
-                placeholder={copy.forms.displayNamePlaceholder}
-                minLength={2}
-                maxLength={60}
-                autoComplete="name"
-                required
-              />
-              <p className="text-xs leading-5 text-muted-foreground">
-                {copy.forms.displayNameHelper}
-              </p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="signup-email">{copy.forms.email}</Label>
-                <Input id="signup-email" name="email" type="text" inputMode="email" autoComplete="email" required />
-              </div>
-              <PhoneField
-                id="signup-phone"
-                label={copy.forms.phone}
-                dialCode={signUpDialCode}
-                onDialCodeChange={setSignUpDialCode}
-                required={false}
-                helper={copy.forms.phoneHelper}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="signup-password">{copy.forms.password}</Label>
-              <Input
-                id="signup-password"
-                name="password"
-                type="password"
-                minLength={10}
-                maxLength={72}
-                pattern="(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9])\S{10,72}"
-                title={copy.forms.passwordTitle}
-                autoComplete="new-password"
-                required
-              />
-              <div className="rounded-2xl border border-border/70 bg-muted/25 p-3 text-xs leading-5 text-muted-foreground">
-                <div className="mb-1 font-semibold text-slate-800">{copy.forms.passwordRulesTitle}</div>
-                {copy.forms.passwordRules.map((rule) => (
-                  <div key={rule}>- {rule}</div>
-                ))}
-              </div>
-            </div>
-            <AuthSubmitButton pendingLabel={copy.forms.signUpPending} variant="outline" disabled={!configured}>
-              {copy.forms.signUpSubmit}
-            </AuthSubmitButton>
-          </form>
-        </CardContent>
-      </Card>
+      {signupEnabled ? (
+        <>
+          <Card className="border-white/75 bg-white/90">
+            <CardHeader>
+              <CardTitle>{copy.forms.signUpTitle}</CardTitle>
+              <CardDescription>{copy.forms.signUpDescription}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={signUpAction} className="grid gap-4" noValidate>
+                <input type="hidden" name="locale" value={locale} />
+                <ActionBanner state={signUpState} />
+                <div className="grid gap-2">
+                  <Label htmlFor="signup-name">{copy.forms.displayName}</Label>
+                  <Input
+                    id="signup-name"
+                    name="displayName"
+                    placeholder={copy.forms.displayNamePlaceholder}
+                    minLength={2}
+                    maxLength={60}
+                    autoComplete="name"
+                    required
+                  />
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    {copy.forms.displayNameHelper}
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="signup-email">{copy.forms.email}</Label>
+                    <Input id="signup-email" name="email" type="text" inputMode="email" autoComplete="email" required />
+                  </div>
+                  <PhoneField
+                    id="signup-phone"
+                    label={copy.forms.phone}
+                    dialCode={signUpDialCode}
+                    onDialCodeChange={setSignUpDialCode}
+                    required={false}
+                    helper={copy.forms.phoneHelper}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="signup-password">{copy.forms.password}</Label>
+                  <Input
+                    id="signup-password"
+                    name="password"
+                    type="password"
+                    minLength={10}
+                    maxLength={72}
+                    pattern="(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9])\S{10,72}"
+                    title={copy.forms.passwordTitle}
+                    autoComplete="new-password"
+                    required
+                  />
+                  <div className="rounded-2xl border border-border/70 bg-muted/25 p-3 text-xs leading-5 text-muted-foreground">
+                    <div className="mb-1 font-semibold text-slate-800">{copy.forms.passwordRulesTitle}</div>
+                    {copy.forms.passwordRules.map((rule) => (
+                      <div key={rule}>- {rule}</div>
+                    ))}
+                  </div>
+                </div>
+                <AuthSubmitButton pendingLabel={copy.forms.signUpPending} variant="outline" disabled={!configured}>
+                  {copy.forms.signUpSubmit}
+                </AuthSubmitButton>
+              </form>
+            </CardContent>
+          </Card>
 
-      <Card className="border-emerald-200 bg-emerald-50/80">
-        <CardContent className="p-5 text-sm leading-6 text-emerald-950">
-          {copy.forms.testNotice}
-        </CardContent>
-      </Card>
+          <Card className="border-emerald-200 bg-emerald-50/80">
+            <CardContent className="p-5 text-sm leading-6 text-emerald-950">
+              {copy.forms.testNotice}
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
     </section>
   );
 }

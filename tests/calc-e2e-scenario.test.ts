@@ -76,6 +76,32 @@ describe("calculateQuoteScenario", () => {
     expect(result.panelCount).toBe(8);
   });
 
+  it("uses Google Solar calibrated yield for quoted generation when annual DC energy is available", () => {
+    const result = calculateQuoteScenario({
+      map: {
+        ...createEmptyMapSelection(),
+        grossAreaM2: 180,
+        usableAreaM2: 126,
+      },
+      topology: { phase: "3P", mode: "ongrid", batteryMode: "none" },
+      pricingPresetId: "standard",
+      selectedFinanceIds: [],
+      ftRateTHBPerKWh: 0,
+      selfConsumptionRatio: 0.6,
+      exportRateTHBPerKWh: 2.2,
+      googleMatchedRoof: true,
+      googleSellableFitWp: 10400,
+      googleSellablePanelCount: 16,
+      googleAnnualGenerationKWh: 16000,
+    });
+
+    expect(result.isViable).toBe(true);
+    expect(result.generationModel).toBe("google-solar-calibrated");
+    expect(result.roofPotentialAnnualGenerationKWh).toBeCloseTo(13600, 1);
+    expect(result.annualGenerationKWh).toBeCloseTo(13600, 1);
+    expect(result.generationSpecificYieldKWhPerKWp).toBeCloseTo(1307.69, 2);
+  });
+
   it("keeps BOM tiering but recalculates the real kWp from the selected panel spec", () => {
     const result = calculateQuoteScenario({
       map: {

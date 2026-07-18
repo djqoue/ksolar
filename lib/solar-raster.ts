@@ -1,6 +1,11 @@
 "use client";
 
 import { fromArrayBuffer } from "geotiff";
+import {
+  convertUtmBoundsToLatLng,
+  getUtmCrsFromEpsg,
+  looksLikeLatLngBounds,
+} from "@/lib/geo/utm";
 import type { RoofShape } from "@/types/quote";
 import type {
   GoogleSolarDataLayerPaths,
@@ -145,7 +150,13 @@ async function fetchRasterStack(url: string): Promise<RasterStack> {
     const imageCount = await tiff.getImageCount();
     const firstImage = await tiff.getImage(0);
     const [west, south, east, north] = firstImage.getBoundingBox();
-    const bounds: SolarRasterBounds = { west, south, east, north };
+    const rawBounds: SolarRasterBounds = { west, south, east, north };
+    const projectedCrs = firstImage.getGeoKeys?.()?.ProjectedCSTypeGeoKey;
+    const utmCrs = getUtmCrsFromEpsg(projectedCrs);
+    const bounds =
+      looksLikeLatLngBounds(rawBounds) || !utmCrs
+        ? rawBounds
+        : convertUtmBoundsToLatLng(rawBounds, utmCrs);
     const width = firstImage.getWidth();
     const height = firstImage.getHeight();
     const bands: NumericRaster[] = [];

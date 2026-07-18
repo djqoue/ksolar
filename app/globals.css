@@ -238,7 +238,28 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+
   .map-workspace-enter {
     animation: none;
+    filter: none;
+    transform: none;
+  }
+
+  button:active,
+  [role="button"]:active {
+    transform: none;
   }
 }

@@ -30,6 +30,7 @@ export interface CustomerIntake {
   largeAppliances: LargeApplianceType[];
   applianceQuantities: ApplianceQuantityMap;
   notes: string;
+  consentToContact: boolean;
 }
 
 export interface CustomerIntakeCompletion {
@@ -41,6 +42,35 @@ export interface CustomerIntakeSaveState {
   status: "idle" | "error" | "success";
   message: string;
   customerId?: string;
+}
+
+export interface CustomerIntakeRpcAppliance {
+  appliance_type: string;
+  label: string;
+  quantity: number;
+  rated_power_w: number;
+  estimated_hours_per_day: number;
+  inverter_load: boolean;
+}
+
+export interface CustomerIntakeRpcParams {
+  p_customer_id: string | null;
+  p_display_name: string;
+  p_primary_phone: string | null;
+  p_primary_email: string | null;
+  p_line_id: string | null;
+  p_address_text: string;
+  p_latitude: number | null;
+  p_longitude: number | null;
+  p_monthly_bill_thb: number | null;
+  p_annual_electricity_spend_thb: number | null;
+  p_age: number | null;
+  p_annual_income_thb: number | null;
+  p_education_background: EducationBackground;
+  p_customer_factors: Record<string, unknown>;
+  p_appliances: CustomerIntakeRpcAppliance[];
+  p_notes: string | null;
+  p_consent_to_contact: boolean;
 }
 
 export const initialCustomerIntake: CustomerIntake = {
@@ -65,12 +95,22 @@ export const initialCustomerIntake: CustomerIntake = {
     ev: "1",
   },
   notes: "",
+  consentToContact: false,
 };
 
 export const initialCustomerIntakeSaveState: CustomerIntakeSaveState = {
   status: "idle",
   message: "",
 };
+
+export function resetCustomerIntakeSaveStateForEdit(
+  state: CustomerIntakeSaveState,
+): CustomerIntakeSaveState {
+  return {
+    ...initialCustomerIntakeSaveState,
+    customerId: state.customerId,
+  };
+}
 
 export const EDUCATION_OPTIONS: Array<{ id: EducationBackground; label: string }> = [
   { id: "unknown", label: "暂不填写" },
@@ -108,6 +148,7 @@ export const CUSTOMER_INTAKE_COPY = {
       displayName: "customer name",
       addressText: "home address",
       contact: "one contact method",
+      consent: "consent to save contact details and precise location",
       age: "age",
       phone: "phone",
       email: "email",
@@ -188,6 +229,7 @@ export const CUSTOMER_INTAKE_COPY = {
       displayName: "客户姓名",
       addressText: "住址",
       contact: "至少一种联系方式",
+      consent: "同意保存联系方式和精确位置",
       age: "年龄",
       phone: "电话",
       email: "邮箱",
@@ -268,6 +310,7 @@ export const CUSTOMER_INTAKE_COPY = {
       displayName: "ชื่อลูกค้า",
       addressText: "ที่อยู่",
       contact: "ช่องทางติดต่ออย่างน้อยหนึ่งช่องทาง",
+      consent: "ความยินยอมให้บันทึกข้อมูลติดต่อและตำแหน่งที่แม่นยำ",
       age: "อายุ",
       phone: "เบอร์โทร",
       email: "อีเมล",
@@ -361,6 +404,10 @@ export function getCustomerIntakeCompletion(value: CustomerIntake, locale: AppLo
     missing.push(copy.requiredFields.contact);
   }
 
+  if (!value.consentToContact) {
+    missing.push(copy.requiredFields.consent);
+  }
+
   return {
     ready: missing.length === 0,
     missing,
@@ -426,6 +473,7 @@ export function parseCustomerIntakeFormData(formData: FormData): CustomerIntake 
     largeAppliances: formData.getAll("largeAppliances").filter(isLargeApplianceType),
     applianceQuantities: parseApplianceQuantities(formData),
     notes: formValue(formData, "notes"),
+    consentToContact: parseBooleanFormValue(formData, "consentToContact"),
   };
 }
 
@@ -464,6 +512,38 @@ export function buildCustomerFactorPayload(value: CustomerIntake) {
   };
 }
 
+export function buildCustomerIntakeRpcParams(
+  value: CustomerIntake,
+  customerId?: string | null,
+): CustomerIntakeRpcParams {
+  return {
+    p_customer_id: customerId?.trim() || null,
+    p_display_name: value.displayName.trim(),
+    p_primary_phone: normalizeCustomerPhone(value.phone) || null,
+    p_primary_email: normalizeEmail(value.email) || null,
+    p_line_id: value.lineId.trim() || null,
+    p_address_text: value.addressText.trim(),
+    p_latitude: parseOptionalNumber(value.latitude),
+    p_longitude: parseOptionalNumber(value.longitude),
+    p_monthly_bill_thb: parseOptionalNumber(value.monthlyElectricityBillTHB),
+    p_annual_electricity_spend_thb: parseOptionalNumber(value.annualElectricitySpendTHB),
+    p_age: parseOptionalNumber(value.age),
+    p_annual_income_thb: parseOptionalNumber(value.annualIncomeTHB),
+    p_education_background: value.educationBackground,
+    p_customer_factors: buildCustomerFactorPayload(value),
+    p_appliances: getSelectedApplianceDetails(value).map(({ option, quantity }) => ({
+      appliance_type: option.type,
+      label: option.crmLabel,
+      quantity,
+      rated_power_w: option.ratedPowerW,
+      estimated_hours_per_day: option.estimatedHoursPerDay,
+      inverter_load: option.inverterLoad,
+    })),
+    p_notes: value.notes.trim() || null,
+    p_consent_to_contact: value.consentToContact,
+  };
+}
+
 export function getSelectedApplianceDetails(value: CustomerIntake) {
   return LARGE_APPLIANCE_OPTIONS.filter((option) => value.largeAppliances.includes(option.id)).map((option) => ({
     option,
@@ -499,6 +579,11 @@ function hasAnyContact(value: CustomerIntake) {
 function formValue(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function parseBooleanFormValue(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return typeof value === "string" && ["1", "true", "on", "yes"].includes(value.toLowerCase());
 }
 
 function parseEducationBackground(value: string): EducationBackground {

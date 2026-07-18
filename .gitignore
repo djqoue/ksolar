@@ -10,4 +10,4 @@ coverage
 dist
 *.log
 .DS_Store
-tsbuildinfo
+*.tsbuildinfo

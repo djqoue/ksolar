@@ -2,6 +2,27 @@ import { FINANCE_PRODUCTS } from "@/lib/config/finance-products";
 import { SOLAR_DEFAULTS } from "@/lib/config/solar";
 import type { FinanceProduct, FinanceSelectionSummary } from "@/types/finance";
 
+function isFinancingProduct(product: FinanceProduct) {
+  return product.type === "loan" || product.type === "installment";
+}
+
+/**
+ * Loans and installment plans are one mutually-exclusive payment choice.
+ * Subsidies and tax credits remain independently selectable.
+ */
+export function normalizeFinanceProductIds(selectedFinanceIds: string[]) {
+  const selectedIds = new Set(selectedFinanceIds);
+  const selectedFinancingProduct = FINANCE_PRODUCTS.find(
+    (product) => isFinancingProduct(product) && selectedIds.has(product.id),
+  );
+
+  return FINANCE_PRODUCTS.filter(
+    (product) =>
+      selectedIds.has(product.id) &&
+      (!isFinancingProduct(product) || product.id === selectedFinancingProduct?.id),
+  ).map((product) => product.id);
+}
+
 function amortizedMonthlyPayment(principal: number, annualRatePercent: number, termMonths: number) {
   const monthlyRate = annualRatePercent / 100 / 12;
 
@@ -53,7 +74,8 @@ export function calculateFinanceSelection(
   suggestedSellPriceTHB: number,
   selectedFinanceIds: string[],
 ): FinanceSelectionSummary {
-  const appliedProducts = FINANCE_PRODUCTS.filter((product) => selectedFinanceIds.includes(product.id));
+  const normalizedFinanceIds = normalizeFinanceProductIds(selectedFinanceIds);
+  const appliedProducts = FINANCE_PRODUCTS.filter((product) => normalizedFinanceIds.includes(product.id));
 
   const totalSubsidyTHB = appliedProducts
     .filter((product) => product.type === "subsidy")

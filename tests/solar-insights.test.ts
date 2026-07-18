@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSolarSelectionMatchSummary,
   buildSolarCrossCheckSummary,
+  buildSellableSolarPanelFootprints,
   getGoogleSolarSellableFit,
   getGoogleSolarNormalizedEquivalent,
   getGoogleSolarRecommendedKw,
@@ -149,6 +150,31 @@ describe("google solar helpers", () => {
     expect(summary.sellableFitKw).toBe(8.8);
     expect(summary.ksolarPanelPowerWp).toBe(550);
     expect(summary.cautionSummary).toContain("550W");
+  });
+
+  it("builds a sellable max-layout footprint from Google panel centers and selected module size", () => {
+    const footprints = buildSellableSolarPanelFootprints(
+      {
+        ...baseSummary,
+        maxArrayAreaMeters2: 5.4,
+        roofSegments: [{ segmentIndex: 0, pitchDegrees: 10, azimuthDegrees: 180, areaMeters2: 20, groundAreaMeters2: 18 }],
+        solarPanels: [
+          { center: { latitude: 13.7562, longitude: 100.5017 }, orientation: "PORTRAIT", segmentIndex: 0, yearlyEnergyDcKwh: 100 },
+          { center: { latitude: 13.7563, longitude: 100.5018 }, orientation: "PORTRAIT", segmentIndex: 0, yearlyEnergyDcKwh: 300 },
+          { center: { latitude: 13.7564, longitude: 100.5019 }, orientation: "PORTRAIT", segmentIndex: 0, yearlyEnergyDcKwh: 200 },
+        ],
+      },
+      {
+        areaM2: 2.7,
+        longSideM: 2.38,
+        powerWp: 600,
+        shortSideM: 1.13,
+      },
+    );
+
+    expect(footprints).toHaveLength(2);
+    expect(footprints[0].center).toEqual({ latitude: 13.7563, longitude: 100.5018 });
+    expect(footprints[0].path).toHaveLength(4);
   });
 
   it("marks Google Solar as matched when the nearest building center is inside the selected roof", () => {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildGoogleApiErrorPayload } from "@/lib/google-api-errors";
 import { resolveAppLocale } from "@/lib/i18n";
+import { requireAuthenticatedApiUser } from "@/lib/server/api-auth";
 
 const GOOGLE_GEOCODING_ENDPOINT = "https://maps.googleapis.com/maps/api/geocode/json";
 
@@ -19,6 +20,12 @@ interface GoogleGeocodePayload {
 }
 
 export async function GET(request: Request) {
+  const authError = await requireAuthenticatedApiUser();
+
+  if (authError) {
+    return authError;
+  }
+
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address")?.trim();
   const locale = resolveAppLocale(searchParams.get("locale"));
@@ -27,7 +34,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ result: null, error: "Address is required." }, { status: 400 });
   }
 
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
   if (!apiKey) {
     return NextResponse.json({ result: null, error: "Google Maps key is not configured." });

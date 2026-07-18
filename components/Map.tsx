@@ -3,11 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Circle as GoogleMapCircle,
-  DrawingManager,
   GoogleMap,
   Polygon as GoogleMapPolygon,
   useJsApiLoader,
 } from "@react-google-maps/api";
+import {
+  TerraDraw,
+  TerraDrawPolygonMode,
+  TerraDrawRectangleMode,
+  TerraDrawSelectMode,
+  type GeoJSONStoreFeatures,
+  type IdStrategy,
+} from "terra-draw";
+import { TerraDrawGoogleMapsAdapter } from "terra-draw-google-maps-adapter";
 import { LocateFixed, MapPin, Pentagon, RefreshCw, Search, Square, Trash2, Undo2 } from "lucide-react";
 import { useAppCopy, useLocaleContext } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
@@ -20,12 +28,6 @@ import { SOLAR_DEFAULTS } from "@/lib/config/solar";
 import { buildGoogleSolarPanelFootprints, isSolarPointInsideSelection, type SolarSelectionMatchSummary } from "@/lib/solar";
 import type { MapSelectionSummary, RoofShape, ShapeKind } from "@/types/quote";
 import type { GoogleSolarSummary } from "@/types/solar";
-
-interface OverlayRecord {
-  id: string;
-  kind: ShapeKind;
-  overlay: google.maps.Polygon | google.maps.Rectangle;
-}
 
 interface MapProps {
   value: MapSelectionSummary;
@@ -62,56 +64,53 @@ function boundsToPath(bounds?: GoogleSolarSummary["boundingBox"]) {
   ];
 }
 
-function rectangleToPath(rectangle: google.maps.Rectangle) {
-  const bounds = rectangle.getBounds();
-  if (!bounds) {
-    return [];
+const roofShapeIdStrategy: IdStrategy<string | number> = {
+  getId: () =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `roof-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+  isValidId: (id) => typeof id === "string" && id.length > 0,
+};
+
+function isRoofFeature(feature: GeoJSONStoreFeatures) {
+  return (
+    feature.geometry.type === "Polygon" &&
+    !feature.properties.currentlyDrawing &&
+    (feature.properties.mode === "polygon" || feature.properties.mode === "rectangle")
+  );
+}
+
+function featureToRoofShape(feature: GeoJSONStoreFeatures): RoofShape | null {
+  if (!isRoofFeature(feature) || feature.geometry.type !== "Polygon") {
+    return null;
   }
 
-  const northEast = bounds.getNorthEast();
-  const southWest = bounds.getSouthWest();
+  const mode = feature.properties.mode;
+  const coordinates = feature.geometry.coordinates[0] as Array<[number, number]>;
+  const unclosedCoordinates =
+    coordinates.length > 1 &&
+    coordinates[0][0] === coordinates[coordinates.length - 1][0] &&
+    coordinates[0][1] === coordinates[coordinates.length - 1][1]
+      ? coordinates.slice(0, -1)
+      : coordinates;
+  const path = unclosedCoordinates.map(([lng, lat]) => ({ lat, lng }));
 
-  return [
-    { lat: northEast.lat(), lng: southWest.lng() },
-    { lat: northEast.lat(), lng: northEast.lng() },
-    { lat: southWest.lat(), lng: northEast.lng() },
-    { lat: southWest.lat(), lng: southWest.lng() },
-  ];
+  if (path.length < 3) {
+    return null;
+  }
+
+  return {
+    id: String(feature.id),
+    kind: mode as Extract<ShapeKind, "polygon" | "rectangle">,
+    path,
+    areaM2: google.maps.geometry.spherical.computeArea(path),
+  };
 }
 
-function polygonToPath(polygon: google.maps.Polygon) {
-  return polygon
-    .getPath()
-    .getArray()
-    .map((point) => ({ lat: point.lat(), lng: point.lng() }));
-}
-
-function buildSelection(overlays: OverlayRecord[]): MapSelectionSummary {
-  const shapes: RoofShape[] = overlays.map(({ id, kind, overlay }) => {
-    if (kind === "rectangle") {
-      const path = rectangleToPath(overlay as google.maps.Rectangle);
-      const areaM2 = google.maps.geometry.spherical.computeArea(path);
-
-      return {
-        id,
-        kind,
-        path,
-        areaM2,
-      };
-    }
-
-    const path = polygonToPath(overlay as google.maps.Polygon);
-    const areaM2 = google.maps.geometry.spherical.computeArea(
-      path.map((point) => new google.maps.LatLng(point.lat, point.lng)),
-    );
-
-    return {
-      id,
-      kind,
-      path,
-      areaM2,
-    };
-  });
+function buildSelection(features: GeoJSONStoreFeatures[]): MapSelectionSummary {
+  const shapes = features
+    .map(featureToRoofShape)
+    .filter((shape): shape is RoofShape => Boolean(shape));
 
   const grossAreaM2 = shapes.reduce((sum, shape) => sum + shape.areaM2, 0);
 
@@ -120,6 +119,25 @@ function buildSelection(overlays: OverlayRecord[]): MapSelectionSummary {
     grossAreaM2,
     usableAreaFactor: SOLAR_DEFAULTS.usableAreaFactor,
     usableAreaM2: grossAreaM2 * SOLAR_DEFAULTS.usableAreaFactor,
+  };
+}
+
+function roofShapeToFeature(shape: RoofShape): GeoJSONStoreFeatures | null {
+  if ((shape.kind !== "polygon" && shape.kind !== "rectangle") || shape.path.length < 3) {
+    return null;
+  }
+
+  const coordinates: Array<[number, number]> = shape.path.map((point) => [point.lng, point.lat]);
+  coordinates.push([...coordinates[0]] as [number, number]);
+
+  return {
+    id: shape.id,
+    type: "Feature",
+    properties: { mode: shape.kind },
+    geometry: {
+      type: "Polygon",
+      coordinates: [coordinates],
+    },
   };
 }
 
@@ -142,12 +160,42 @@ export function Map({
       : locale === "th"
         ? { rectangle: "สี่เหลี่ยม", polygon: "หลายเหลี่ยม", pan: "เลื่อน", undo: "ย้อนกลับ", clear: "ล้าง" }
         : { rectangle: "Rectangle", polygon: "Polygon", pan: "Pan", undo: "Undo", clear: "Clear" };
+  const accessibilityLabels =
+    locale === "zh"
+      ? {
+          manualAlternative: "无法使用地图？手动输入屋顶面积",
+          manualHint: "手动面积是地图手势和绘图工具的键盘替代方式。输入后仍可继续报价。",
+          selectedShapes: "已选屋顶区域",
+          removeShape: "删除",
+          clearConfirm: "确定清空全部屋顶区域吗？此操作无法撤销。",
+          manualReplaceConfirm: "改用手动面积会清除已绘制的屋顶。确定继续吗？",
+        }
+      : locale === "th"
+        ? {
+            manualAlternative: "ใช้แผนที่ไม่ได้? กรอกพื้นที่หลังคาเอง",
+            manualHint: "การกรอกพื้นที่เองเป็นทางเลือกแทนท่าทางบนแผนที่และใช้ได้ด้วยแป้นพิมพ์",
+            selectedShapes: "พื้นที่หลังคาที่เลือก",
+            removeShape: "ลบ",
+            clearConfirm: "ล้างพื้นที่หลังคาทั้งหมดหรือไม่? การดำเนินการนี้ย้อนกลับไม่ได้",
+            manualReplaceConfirm: "การใช้พื้นที่ที่กรอกเองจะลบหลังคาที่วาดไว้ ต้องการดำเนินการต่อหรือไม่",
+          }
+        : {
+            manualAlternative: "Can't use the map? Enter roof area manually",
+            manualHint: "Manual area is a keyboard-accessible alternative to map gestures and drawing tools.",
+            selectedShapes: "Selected roof areas",
+            removeShape: "Remove",
+            clearConfirm: "Clear all roof areas? This can't be undone.",
+            manualReplaceConfirm: "Entering a manual area will clear the drawn roof. Continue?",
+          };
   const googleMapsApiKey =
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || RUNTIME_FALLBACKS.googleMapsApiKey;
-  const overlaysRef = useRef<OverlayRecord[]>([]);
   const mapRef = useRef<google.maps.Map | null>(null);
-  const drawingManagerRef = useRef<google.maps.drawing.DrawingManager | null>(null);
-  const [manualArea, setManualArea] = useState(value.grossAreaM2 ? String(value.grossAreaM2) : "");
+  const terraDrawRef = useRef<TerraDraw | null>(null);
+  const lastFocusRequestIdRef = useRef(0);
+  const initialManualShape = value.shapes.find((shape) => shape.kind === "manual");
+  const [manualArea, setManualArea] = useState(
+    initialManualShape?.areaM2 ? String(initialManualShape.areaM2) : "",
+  );
   const [searchValue, setSearchValue] = useState("");
   const [isLocating, setIsLocating] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -155,6 +203,7 @@ export function Map({
   const [mapCenter, setMapCenter] = useState(DEFAULT_MAP_CENTER);
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [drawMode, setDrawMode] = useState<ShapeKind | null>(null);
+  const [drawReady, setDrawReady] = useState(false);
   const [isFlyoverActive, setIsFlyoverActive] = useState(false);
 
   const { isLoaded, loadError } = useJsApiLoader({
@@ -176,14 +225,21 @@ export function Map({
   }, [isLoaded, loadError]);
 
   useEffect(() => {
-    if (!drawingManagerRef.current || typeof google === "undefined") {
+    const draw = terraDrawRef.current;
+    if (!draw?.enabled || !drawReady) {
       return;
     }
 
-    drawingManagerRef.current.setDrawingMode(
-      drawMode ? google.maps.drawing.OverlayType[drawMode.toUpperCase() as "RECTANGLE" | "POLYGON"] : null,
-    );
-  }, [drawMode]);
+    draw.setMode(drawMode === "polygon" || drawMode === "rectangle" ? drawMode : "select");
+  }, [drawMode, drawReady]);
+
+  useEffect(
+    () => () => {
+      terraDrawRef.current?.stop();
+      terraDrawRef.current = null;
+    },
+    [],
+  );
 
   const summary = value.grossAreaM2 > 0 ? value : createEmptyMapSelection();
   const panelOverlay = useMemo(() => {
@@ -194,9 +250,88 @@ export function Map({
     return { inside, outside };
   }, [solarInsights, summary.shapes]);
 
-  const syncShapes = () => {
-    onChange(buildSelection(overlaysRef.current));
-  };
+  const initializeDrawing = useCallback((map: google.maps.Map) => {
+    if (terraDrawRef.current || typeof google === "undefined" || !map.getProjection()) {
+      return;
+    }
+
+    const draw = new TerraDraw({
+      adapter: new TerraDrawGoogleMapsAdapter({
+        coordinatePrecision: 9,
+        isolatedData: true,
+        lib: google.maps,
+        map,
+      }),
+      idStrategy: roofShapeIdStrategy,
+      modes: [
+        new TerraDrawSelectMode({
+          flags: {
+            polygon: {
+              feature: {
+                draggable: true,
+                coordinates: {
+                  deletable: true,
+                  draggable: true,
+                  midpoints: true,
+                },
+              },
+            },
+            rectangle: {
+              feature: {
+                draggable: true,
+                coordinates: {
+                  draggable: true,
+                  midpoints: true,
+                },
+              },
+            },
+          },
+        }),
+        new TerraDrawPolygonMode({
+          editable: true,
+          styles: {
+            fillColor: "#0f766e",
+            fillOpacity: 0.18,
+            outlineColor: "#0f766e",
+            outlineWidth: 2,
+          },
+        }),
+        new TerraDrawRectangleMode({
+          styles: {
+            fillColor: "#f97316",
+            fillOpacity: 0.14,
+            outlineColor: "#f97316",
+            outlineWidth: 2,
+          },
+        }),
+      ],
+    });
+
+    draw.start();
+
+    const restoredFeatures = value.shapes
+      .map(roofShapeToFeature)
+      .filter((feature): feature is GeoJSONStoreFeatures => Boolean(feature));
+    if (restoredFeatures.length > 0) {
+      draw.addFeatures(restoredFeatures);
+    }
+
+    const syncShapes = () => {
+      onChange(buildSelection(draw.getSnapshot()));
+    };
+
+    draw.on("change", syncShapes);
+    draw.on("finish", () => {
+      syncShapes();
+      draw.setMode("select");
+      setDrawMode(null);
+      setLocationStatus(copy.map.step3Body);
+    });
+    draw.setMode(drawMode === "polygon" || drawMode === "rectangle" ? drawMode : "select");
+
+    terraDrawRef.current = draw;
+    setDrawReady(true);
+  }, [copy.map.step3Body, drawMode, onChange, value.shapes]);
 
   const applyMapCenter = useCallback((
     nextCenter: { lat: number; lng: number },
@@ -220,6 +355,13 @@ export function Map({
     setLocationStatus(statusMessage);
 
     if (!mapRef.current) {
+      return;
+    }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      mapRef.current.panTo(nextCenter);
+      mapRef.current.setZoom(19);
+      setIsFlyoverActive(false);
       return;
     }
 
@@ -267,55 +409,41 @@ export function Map({
     };
   }, [immersive, isLoaded, refreshMapSize]);
 
-  const attachOverlayListeners = (overlayRecord: OverlayRecord) => {
-    if (overlayRecord.kind === "polygon") {
-      const polygon = overlayRecord.overlay as google.maps.Polygon;
-      const path = polygon.getPath();
-      path.addListener("insert_at", syncShapes);
-      path.addListener("set_at", syncShapes);
-      path.addListener("remove_at", syncShapes);
-      polygon.addListener("mouseup", syncShapes);
-    } else {
-      const rectangle = overlayRecord.overlay as google.maps.Rectangle;
-      rectangle.addListener("bounds_changed", syncShapes);
-    }
-  };
-
-  const handleOverlayComplete = (event: google.maps.drawing.OverlayCompleteEvent) => {
-    const overlayRecord: OverlayRecord = {
-      id: `${event.type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      kind: event.type as ShapeKind,
-      overlay: event.overlay as google.maps.Polygon | google.maps.Rectangle,
-    };
-
-    const overlay = overlayRecord.overlay;
-    if ("setEditable" in overlay) {
-      overlay.setEditable(true);
-    }
-    overlaysRef.current.push(overlayRecord);
-    attachOverlayListeners(overlayRecord);
-    syncShapes();
-    setDrawMode(null);
-    setLocationStatus(
-      event.type === "rectangle"
-        ? copy.map.step3Body
-        : copy.map.step3Body,
-    );
-  };
-
   const clearAll = () => {
-    overlaysRef.current.forEach(({ overlay }) => overlay.setMap(null));
-    overlaysRef.current = [];
+    if (summary.shapes.length > 0 && !window.confirm(accessibilityLabels.clearConfirm)) {
+      return;
+    }
+
+    terraDrawRef.current?.clear();
+    setManualArea("");
     onChange(createEmptyMapSelection());
   };
 
   const removeLast = () => {
-    const last = overlaysRef.current.pop();
+    const draw = terraDrawRef.current;
+    const features = draw?.getSnapshot().filter(isRoofFeature) ?? [];
+    const last = features[features.length - 1];
     if (!last) {
+      if (summary.shapes.some((shape) => shape.kind === "manual")) {
+        setManualArea("");
+        onChange(createEmptyMapSelection());
+      }
       return;
     }
-    last.overlay.setMap(null);
-    syncShapes();
+    draw?.removeFeatures([last.id]);
+  };
+
+  const removeShape = (shape: RoofShape) => {
+    if (shape.kind === "manual") {
+      setManualArea("");
+      onChange(createEmptyMapSelection());
+      return;
+    }
+
+    const draw = terraDrawRef.current;
+    if (draw?.hasFeature(shape.id)) {
+      draw.removeFeatures([shape.id]);
+    }
   };
 
   const geocodeSearchValue = useCallback(async (query: string, flyover = false) => {
@@ -369,6 +497,12 @@ export function Map({
     if (!isLoaded || !focusRequestId) {
       return;
     }
+
+    if (lastFocusRequestIdRef.current === focusRequestId) {
+      return;
+    }
+
+    lastFocusRequestIdRef.current = focusRequestId;
 
     if (focusPoint) {
       flyToMapCenter(
@@ -466,12 +600,51 @@ export function Map({
   };
 
   const handleManualAreaChange = (nextValue: string) => {
-    setManualArea(nextValue);
-    const grossAreaM2 = Number(nextValue);
+    const draw = terraDrawRef.current;
+    const drawnFeatures = draw?.enabled ? draw.getSnapshot().filter(isRoofFeature) : [];
+    const storedDrawnShapes = value.shapes.filter(
+      (shape) => shape.kind === "polygon" || shape.kind === "rectangle",
+    );
+    const storedGrossAreaM2 = storedDrawnShapes.reduce((sum, shape) => sum + shape.areaM2, 0);
+    const storedUsableAreaFactor =
+      Number.isFinite(value.usableAreaFactor) && value.usableAreaFactor > 0
+        ? value.usableAreaFactor
+        : SOLAR_DEFAULTS.usableAreaFactor;
+    const preservedDrawnSelection: MapSelectionSummary | null =
+      drawnFeatures.length > 0
+        ? buildSelection(drawnFeatures)
+        : storedDrawnShapes.length > 0
+          ? {
+              shapes: storedDrawnShapes,
+              grossAreaM2: storedGrossAreaM2,
+              usableAreaFactor: storedUsableAreaFactor,
+              usableAreaM2: storedGrossAreaM2 * storedUsableAreaFactor,
+            }
+          : null;
 
-    if (!Number.isFinite(grossAreaM2) || grossAreaM2 < 0) {
-      onChange(createEmptyMapSelection());
+    if (!nextValue.trim()) {
+      setManualArea("");
+      onChange(preservedDrawnSelection ?? createEmptyMapSelection());
       return;
+    }
+
+    const grossAreaM2 = Number(nextValue);
+    const hasDrawnRoof = preservedDrawnSelection !== null;
+
+    if (!Number.isFinite(grossAreaM2) || grossAreaM2 <= 0) {
+      setManualArea(nextValue);
+      onChange(preservedDrawnSelection ?? createEmptyMapSelection());
+      return;
+    }
+
+    if (hasDrawnRoof && !window.confirm(accessibilityLabels.manualReplaceConfirm)) {
+      return;
+    }
+
+    setManualArea(nextValue);
+
+    if (drawnFeatures.length > 0) {
+      draw?.clear();
     }
 
     onChange({
@@ -517,9 +690,13 @@ export function Map({
         </CardHeader>
         <CardContent className="flex min-h-[420px] flex-col gap-4 sm:h-[560px]">
           <div className="rounded-[1.25rem] border border-border/70 bg-muted/40 p-4">
-            <label className="mb-2 block text-sm font-medium">{copy.map.manualRoofArea}</label>
+            <label htmlFor="manual-roof-area-unavailable" className="mb-2 block text-sm font-medium">{copy.map.manualRoofArea}</label>
             <Input
+              id="manual-roof-area-unavailable"
               inputMode="decimal"
+              min="0"
+              step="0.1"
+              type="number"
               placeholder="e.g. 120"
               value={manualArea}
               onChange={(event) => handleManualAreaChange(event.target.value)}
@@ -555,9 +732,13 @@ export function Map({
             </div>
           ) : null}
           <div className="w-full max-w-md rounded-[1.25rem] border border-border/70 bg-muted/40 p-4">
-            <label className="mb-2 block text-left text-sm font-medium">{copy.map.manualRoofArea}</label>
+            <label htmlFor="manual-roof-area-loading" className="mb-2 block text-left text-sm font-medium">{copy.map.manualRoofArea}</label>
             <Input
+              id="manual-roof-area-loading"
               inputMode="decimal"
+              min="0"
+              step="0.1"
+              type="number"
               placeholder="e.g. 120"
               value={manualArea}
               onChange={(event) => handleManualAreaChange(event.target.value)}
@@ -579,8 +760,8 @@ export function Map({
         position: "absolute" as const,
         inset: 0,
         width: "100%",
-        height: "calc(100vh - 64px)",
-        minHeight: "680px",
+        height: "calc(100dvh - 64px)",
+        minHeight: "480px",
       }
     : undefined;
 
@@ -588,7 +769,7 @@ export function Map({
     <Card
       className={
         immersive
-          ? "map-stage relative h-[calc(100vh-64px)] min-h-[680px] overflow-hidden rounded-none border-0 bg-slate-950 shadow-none sm:min-h-[720px]"
+          ? "map-stage relative h-[calc(100dvh-64px)] min-h-[480px] overflow-hidden rounded-none border-0 bg-slate-950 shadow-none sm:min-h-[620px]"
           : "h-full overflow-hidden"
       }
     >
@@ -615,6 +796,7 @@ export function Map({
               }
             >
               <Input
+                aria-label={copy.map.searchPlaceholder}
                 className={immersive ? "col-span-2 h-11 rounded-xl bg-white/95 text-sm sm:col-span-1" : "col-span-2 xl:col-span-1"}
                 placeholder={copy.map.searchPlaceholder}
                 value={searchValue}
@@ -657,7 +839,13 @@ export function Map({
               </Button>
             </div>
             {locationStatus ? (
-              <p className={immersive ? "line-clamp-2 text-xs leading-5 text-slate-600 sm:text-sm" : "text-sm text-muted-foreground"}>{locationStatus}</p>
+              <p
+                aria-live="polite"
+                role="status"
+                className={immersive ? "line-clamp-2 text-xs leading-5 text-slate-600 sm:text-sm" : "text-sm text-muted-foreground"}
+              >
+                {locationStatus}
+              </p>
             ) : null}
           </div>
           <div className={immersive ? "hidden gap-2 lg:flex" : "hidden grid-cols-2 gap-3 sm:grid xl:contents"}>
@@ -683,6 +871,7 @@ export function Map({
               variant={drawMode === "rectangle" ? "default" : "outline"}
               size="sm"
               className={toolButtonClass}
+              aria-pressed={drawMode === "rectangle"}
               onClick={() => {
                 setDrawMode("rectangle");
                 setLocationStatus(copy.map.step2Body);
@@ -695,6 +884,7 @@ export function Map({
               variant={drawMode === "polygon" ? "default" : "outline"}
               size="sm"
               className={toolButtonClass}
+              aria-pressed={drawMode === "polygon"}
               onClick={() => {
                 setDrawMode("polygon");
                 setLocationStatus(copy.map.advancedModeHint);
@@ -707,6 +897,7 @@ export function Map({
               variant={drawMode === null ? "secondary" : "ghost"}
               size="sm"
               className={toolButtonClass}
+              aria-pressed={drawMode === null}
               onClick={() => setDrawMode(null)}
             >
               {toolLabels.pan}
@@ -730,11 +921,59 @@ export function Map({
               {drawMode === "polygon" ? copy.map.advancedModeHint : copy.map.step2Body}
             </p>
           ) : null}
+          <details className="mt-2 rounded-xl border border-border/70 bg-background/90 px-3 py-2 text-sm">
+            <summary className="min-h-11 cursor-pointer content-center font-medium text-slate-900">
+              {accessibilityLabels.manualAlternative}
+            </summary>
+            <div className="grid gap-3 pb-2 pt-2">
+              <div>
+                <label htmlFor="manual-roof-area" className="mb-2 block font-medium">
+                  {copy.map.manualRoofArea}
+                </label>
+                <Input
+                  id="manual-roof-area"
+                  aria-describedby="manual-roof-area-hint"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.1"
+                  type="number"
+                  placeholder="e.g. 120"
+                  value={manualArea}
+                  onChange={(event) => handleManualAreaChange(event.target.value)}
+                />
+                <p id="manual-roof-area-hint" className="mt-2 text-xs leading-5 text-muted-foreground">
+                  {accessibilityLabels.manualHint}
+                </p>
+              </div>
+              {summary.shapes.length > 0 ? (
+                <div aria-label={accessibilityLabels.selectedShapes} className="grid gap-2">
+                  <div className="font-medium">{accessibilityLabels.selectedShapes}</div>
+                  <ul className="grid gap-2">
+                    {summary.shapes.map((shape, index) => (
+                      <li key={shape.id} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border/70 px-3">
+                        <span>
+                          {index + 1}. {formatNumber(shape.areaM2, 1)} m²
+                        </span>
+                        <Button
+                          aria-label={`${accessibilityLabels.removeShape} ${index + 1}`}
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => removeShape(shape)}
+                        >
+                          {accessibilityLabels.removeShape}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          </details>
         </div>
         <div
           className={
             immersive
-              ? "map-stage absolute inset-0 z-0 h-[calc(100vh-64px)] min-h-[680px] overflow-hidden bg-slate-950 sm:min-h-[720px]"
+              ? "map-stage absolute inset-0 z-0 h-[calc(100dvh-64px)] min-h-[480px] overflow-hidden bg-slate-950 sm:min-h-[620px]"
               : "relative order-3 h-[52vh] min-h-[360px] max-h-[560px] flex-none overflow-hidden rounded-[1.15rem] border border-border/70 sm:h-[58vh] sm:min-h-[520px] md:h-auto md:min-h-0 md:flex-1"
           }
         >
@@ -818,7 +1057,7 @@ export function Map({
           <GoogleMap
             mapContainerClassName={
               immersive
-                ? "absolute inset-0 h-[calc(100vh-64px)] min-h-[680px] w-full sm:min-h-[720px]"
+                ? "absolute inset-0 h-[calc(100dvh-64px)] min-h-[480px] w-full sm:min-h-[620px]"
                 : "h-full w-full"
             }
             mapContainerStyle={immersiveMapContainerStyle}
@@ -829,6 +1068,16 @@ export function Map({
               map.setMapTypeId("satellite");
               window.setTimeout(refreshMapSize, 0);
             }}
+            onIdle={() => {
+              if (mapRef.current) {
+                initializeDrawing(mapRef.current);
+              }
+            }}
+            onUnmount={() => {
+              terraDrawRef.current?.stop();
+              terraDrawRef.current = null;
+              mapRef.current = null;
+            }}
             options={{
               mapTypeControl: false,
               fullscreenControl: false,
@@ -837,6 +1086,7 @@ export function Map({
               gestureHandling: drawMode ? "none" : "greedy",
               draggable: !drawMode,
               disableDoubleClickZoom: Boolean(drawMode),
+              keyboardShortcuts: true,
               }}
             >
               {solarInsights?.boundingBox ? (
@@ -918,29 +1168,6 @@ export function Map({
                 />
               ) : null}
 
-              <DrawingManager
-                onLoad={(manager) => {
-                  drawingManagerRef.current = manager;
-              }}
-              onOverlayComplete={handleOverlayComplete}
-              options={{
-                drawingControl: false,
-                polygonOptions: {
-                  fillColor: "#0f766e",
-                  fillOpacity: 0.18,
-                  strokeColor: "#0f766e",
-                  strokeWeight: 2,
-                  editable: true,
-                },
-                rectangleOptions: {
-                  fillColor: "#f97316",
-                  fillOpacity: 0.14,
-                  strokeColor: "#f97316",
-                  strokeWeight: 2,
-                  editable: true,
-                },
-              }}
-            />
           </GoogleMap>
         </div>
       </CardContent>

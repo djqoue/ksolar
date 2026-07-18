@@ -42,3 +42,32 @@ export async function getCurrentSupabaseUser() {
 
   return user;
 }
+
+export async function getCurrentActiveSalesUser() {
+  const supabase = await createSupabaseServerClient();
+
+  if (!supabase) {
+    return null;
+  }
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return null;
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("sales_profiles")
+    .select("active")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileError || !profile?.active) {
+    return null;
+  }
+
+  return user;
+}

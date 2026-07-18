@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isPublicSignupEnabled } from "@/lib/auth/signup-policy";
 import { composeInternationalPhone, validatePhone } from "@/lib/auth/validation";
 
 describe("auth validation", () => {
@@ -20,5 +21,12 @@ describe("auth validation", () => {
 
   it("rejects incomplete phone numbers before any auth request is sent", () => {
     expect(validatePhone(composeInternationalPhone("+66", "123")).valid).toBe(false);
+  });
+
+  it("keeps public signup disabled unless the server flag is explicitly true", () => {
+    expect(isPublicSignupEnabled("")).toBe(false);
+    expect(isPublicSignupEnabled("false")).toBe(false);
+    expect(isPublicSignupEnabled("1")).toBe(false);
+    expect(isPublicSignupEnabled(" true ")).toBe(true);
   });
 });

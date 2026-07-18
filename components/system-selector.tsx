@@ -1,13 +1,14 @@
 "use client";
 
 import { BatteryCharging, Bolt, Cpu, Gauge, RadioTower, SunMedium, Waves, Zap } from "lucide-react";
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import { useAppCopy, useLocaleContext } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BATTERY_CATALOG, findBattery } from "@/lib/config/battery-catalog";
-import { filterResidentialInverters, findInverter } from "@/lib/config/inverter-catalog";
+import { filterResidentialInverters } from "@/lib/config/inverter-catalog";
 import { DEFAULT_PANEL_ID, findPanel, PRICED_PANELS } from "@/lib/config/panel-catalog";
 import { PRICING_PRESETS } from "@/lib/config/pricing-catalog";
 import { getLocalizedPresetMeta } from "@/lib/i18n";
@@ -36,18 +37,24 @@ interface SystemSelectorProps {
 
 /** Shared styled select element */
 function CatalogSelect({
+  id,
   value,
   onChange,
   children,
+  ariaDescribedBy,
 }: {
+  id: string;
   value: string;
   onChange: (v: string) => void;
   children: React.ReactNode;
+  ariaDescribedBy?: string;
 }) {
   return (
     <select
+      id={id}
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      aria-describedby={ariaDescribedBy}
       className="flex h-11 w-full rounded-xl border border-input bg-background px-4 py-2 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
     >
       {children}
@@ -84,6 +91,31 @@ export function SystemSelector({
   const copy = useAppCopy();
   const { locale } = useLocaleContext();
   const zh = locale === "zh";
+  const selectorId = useId();
+  const panelSelectId = `${selectorId}-panel`;
+  const inverterSelectId = `${selectorId}-inverter`;
+  const batterySelectId = `${selectorId}-battery`;
+  const selectionLabels =
+    locale === "zh"
+      ? {
+          battery: "电池模式",
+          mode: "系统模式",
+          phase: "电表相位",
+          pricing: "价格档位",
+        }
+      : locale === "th"
+        ? {
+            battery: "โหมดแบตเตอรี่",
+            mode: "โหมดระบบ",
+            phase: "เฟสมิเตอร์",
+            pricing: "ระดับราคา",
+          }
+        : {
+            battery: "Battery mode",
+            mode: "System mode",
+            phase: "Meter phase",
+            pricing: "Pricing tier",
+          };
 
   // ── Panel groups ────────────────────────────────────────────────────────
   const panelGroups = useMemo(() => {
@@ -106,7 +138,10 @@ export function SystemSelector({
   );
 
   const activeInverter =
-    selectedInverterId !== AUTO ? findInverter(selectedInverterId) : undefined;
+    selectedInverterId !== AUTO
+      ? inverterOptions.find((inverter) => inverter.id === selectedInverterId)
+      : undefined;
+  const effectiveInverterId = activeInverter?.id ?? AUTO;
 
   // ── Battery list ────────────────────────────────────────────────────────
   const activeBattery =
@@ -121,7 +156,11 @@ export function SystemSelector({
       <CardContent className="flex flex-col gap-4">
 
         {/* ── Phase tabs ───────────────────────────────────────────────── */}
-        <Tabs value={topology.phase} onValueChange={(value) => onTopologyChange({ ...topology, phase: value as SystemTopology["phase"] })}>
+        <Tabs
+          value={topology.phase}
+          onValueChange={(value) => onTopologyChange({ ...topology, phase: value as SystemTopology["phase"] })}
+          aria-label={selectionLabels.phase}
+        >
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="1P">
               <Bolt data-icon="inline-start" />
@@ -135,9 +174,10 @@ export function SystemSelector({
         </Tabs>
 
         {/* ── Mode buttons ─────────────────────────────────────────────── */}
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label={selectionLabels.mode}>
           <button
             type="button"
+            aria-pressed={topology.mode === "ongrid"}
             className={cn(
               "rounded-[1.1rem] border p-4 text-left transition",
               topology.mode === "ongrid" ? "border-primary bg-primary/5" : "border-border bg-background",
@@ -152,6 +192,7 @@ export function SystemSelector({
           </button>
           <button
             type="button"
+            aria-pressed={topology.mode === "hybrid"}
             className={cn(
               "rounded-[1.1rem] border p-4 text-left transition",
               topology.mode === "hybrid" ? "border-primary bg-primary/5" : "border-border bg-background",
@@ -174,17 +215,21 @@ export function SystemSelector({
               <p className="text-sm text-muted-foreground">{copy.system.batteryDescription}</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2" role="group" aria-label={selectionLabels.battery}>
             <Button
+              type="button"
               variant={topology.batteryMode === "none" ? "default" : "outline"}
               size="sm"
+              aria-pressed={topology.batteryMode === "none"}
               onClick={() => onTopologyChange({ ...topology, batteryMode: "none" })}
             >
               {copy.system.noBattery}
             </Button>
             <Button
+              type="button"
               variant={topology.batteryMode === "with_battery" ? "default" : "outline"}
               size="sm"
+              aria-pressed={topology.batteryMode === "with_battery"}
               disabled={topology.mode !== "hybrid"}
               onClick={() => onTopologyChange({ ...topology, mode: "hybrid", batteryMode: "with_battery" })}
             >
@@ -199,11 +244,12 @@ export function SystemSelector({
             <Gauge className="size-4 text-primary" />
             {copy.system.pricingPreset}
           </div>
-          <div className="grid gap-2">
+          <div className="grid gap-2" role="group" aria-label={selectionLabels.pricing}>
             {PRICING_PRESETS.map((preset) => (
               <button
                 key={preset.id}
                 type="button"
+                aria-pressed={pricingPresetId === preset.id}
                 className={cn(
                   "rounded-[1rem] border px-4 py-3 text-left transition",
                   pricingPresetId === preset.id ? "border-primary bg-primary/5" : "border-border/70",
@@ -233,17 +279,22 @@ export function SystemSelector({
           <div className="mt-4 grid gap-4">
             {/* ── Panel selection ──────────────────────────────────────────── */}
             <div className="rounded-lg border border-border/70 bg-background p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <Label htmlFor={panelSelectId} className="mb-3 flex items-center gap-2 text-sm font-semibold">
                 <SunMedium className="size-4 text-primary" />
                 {zh ? "面板选型" : "Panel Selection"}
-              </div>
-              <p className="mb-3 text-sm text-muted-foreground">
+              </Label>
+              <p id={`${panelSelectId}-description`} className="mb-3 text-sm text-muted-foreground">
                 {zh
                   ? "从 iSolarBP 物料库选择组件，报价单价格自动更新。"
                   : "Pick a module from the iSolarBP catalog. BOM price updates instantly."}
               </p>
 
-              <CatalogSelect value={selectedPanelId} onChange={onPanelChange}>
+              <CatalogSelect
+                id={panelSelectId}
+                value={selectedPanelId}
+                onChange={onPanelChange}
+                ariaDescribedBy={`${panelSelectId}-description`}
+              >
                 {panelGroups.map(({ mfg, panels }) => (
                   <optgroup key={mfg} label={mfg}>
                     {panels.map((p) => (
@@ -271,17 +322,22 @@ export function SystemSelector({
 
             {/* ── Inverter selection ───────────────────────────────────────── */}
             <div className="rounded-lg border border-border/70 bg-background p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <Label htmlFor={inverterSelectId} className="mb-3 flex items-center gap-2 text-sm font-semibold">
                 <Cpu className="size-4 text-primary" />
                 {zh ? "逆变器选型" : "Inverter Selection"}
-              </div>
-              <p className="mb-3 text-sm text-muted-foreground">
+              </Label>
+              <p id={`${inverterSelectId}-description`} className="mb-3 text-sm text-muted-foreground">
                 {zh
                   ? "自动会按容量档位匹配，手动选择会覆盖 BOM 默认值。"
                   : "Auto matches by system tier. Manual selection overrides the BOM default."}
               </p>
 
-              <CatalogSelect value={selectedInverterId} onChange={onInverterChange}>
+              <CatalogSelect
+                id={inverterSelectId}
+                value={effectiveInverterId}
+                onChange={onInverterChange}
+                ariaDescribedBy={`${inverterSelectId}-description`}
+              >
                 <option value={AUTO}>{zh ? "自动（按容量档位）" : "Auto (by capacity tier)"}</option>
                 {inverterOptions.map((inv) => (
                   <option key={inv.id} value={inv.id}>
@@ -309,17 +365,22 @@ export function SystemSelector({
             {/* ── Battery selection (only when hybrid + battery) ───────────── */}
             {topology.batteryMode === "with_battery" && (
               <div className="rounded-lg border border-border/70 bg-background p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                <Label htmlFor={batterySelectId} className="mb-3 flex items-center gap-2 text-sm font-semibold">
                   <Zap className="size-4 text-primary" />
                   {zh ? "电池选型" : "Battery Selection"}
-                </div>
-                <p className="mb-3 text-sm text-muted-foreground">
+                </Label>
+                <p id={`${batterySelectId}-description`} className="mb-3 text-sm text-muted-foreground">
                   {zh
                     ? "自动会按容量档位匹配最合适的电池容量。"
                     : "Auto matches the best battery capacity to the system tier."}
                 </p>
 
-                <CatalogSelect value={selectedBatteryId} onChange={onBatteryChange}>
+                <CatalogSelect
+                  id={batterySelectId}
+                  value={selectedBatteryId}
+                  onChange={onBatteryChange}
+                  ariaDescribedBy={`${batterySelectId}-description`}
+                >
                   <option value={AUTO}>{zh ? "自动（按容量档位）" : "Auto (by capacity tier)"}</option>
                   {BATTERY_CATALOG.map((bat) => (
                     <option key={bat.id} value={bat.id}>

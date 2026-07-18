@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuthActionState } from "@/lib/auth/action-state";
+import { isPublicSignupEnabled } from "@/lib/auth/signup-policy";
 import {
   composeInternationalPhone,
   normalizeEmail,
@@ -59,33 +59,9 @@ function getPhoneFromForm(formData: FormData) {
   );
 }
 
-async function getIdentifierAvailabilityError(supabase: SupabaseClient, email: string, phone: string, copy: AuthCopy) {
-  const { data, error } = await supabase
-    .rpc("check_sales_identifier_available", {
-      requested_email: email,
-      requested_phone: phone || null,
-    })
-    .single();
-
-  if (error) {
-    return copy.messages.availabilityFailed(error.message);
-  }
-
-  const availability = data as { email_available?: boolean; phone_available?: boolean } | null;
-
-  if (availability?.email_available === false) {
-    return copy.messages.emailRegistered;
-  }
-
-  if (phone && availability?.phone_available === false) {
-    return copy.messages.phoneRegistered;
-  }
-
-  return null;
-}
-
 export async function signInWithEmailPassword(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {
-  const copy = getAuthCopy(resolveAppLocale(formData.get("locale")?.toString()));
+  const locale = resolveAppLocale(formData.get("locale")?.toString());
+  const copy = getAuthCopy(locale);
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
@@ -105,10 +81,27 @@ export async function signInWithEmailPassword(_prevState: AuthActionState, formD
     return fail(copy.messages.missingPassword);
   }
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
     return fail(mapAuthErrorMessage(error.message, copy));
+  }
+
+  const { data: salesProfile, error: profileError } = await supabase
+    .from("sales_profiles")
+    .select("active")
+    .eq("id", data.user.id)
+    .maybeSingle();
+
+  if (profileError || !salesProfile?.active) {
+    await supabase.auth.signOut();
+    return fail(
+      locale === "zh"
+        ? "这个销售账号尚未启用，请联系管理员。"
+        : locale === "th"
+          ? "บัญชีฝ่ายขายนี้ยังไม่เปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ"
+          : "This sales account is not active. Contact an administrator.",
+    );
   }
 
   revalidatePath("/", "layout");
@@ -116,7 +109,19 @@ export async function signInWithEmailPassword(_prevState: AuthActionState, formD
 }
 
 export async function signUpWithEmailPassword(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {
-  const copy = getAuthCopy(resolveAppLocale(formData.get("locale")?.toString()));
+  const locale = resolveAppLocale(formData.get("locale")?.toString());
+  const copy = getAuthCopy(locale);
+
+  if (!isPublicSignupEnabled()) {
+    return fail(
+      locale === "zh"
+        ? "公开注册已关闭，请联系管理员创建销售账号。"
+        : locale === "th"
+          ? "ปิดการสมัครสาธารณะแล้ว กรุณาติดต่อผู้ดูแลระบบเพื่อสร้างบัญชีฝ่ายขาย"
+          : "Public signup is disabled. Ask an administrator to create your sales account.",
+    );
+  }
+
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
@@ -141,12 +146,6 @@ export async function signUpWithEmailPassword(_prevState: AuthActionState, formD
     return fail(invalidValidation.message || copy.messages.invalidSignup);
   }
 
-  const availabilityError = await getIdentifierAvailabilityError(supabase, email, phone, copy);
-
-  if (availabilityError) {
-    return fail(availabilityError);
-  }
-
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -159,7 +158,8 @@ export async function signUpWithEmailPassword(_prevState: AuthActionState, formD
   });
 
   if (error) {
-    return fail(mapAuthErrorMessage(error.message, copy));
+    // Keep signup responses identifier-agnostic; validation details are handled above.
+    return fail(copy.messages.invalidSignup);
   }
 
   revalidatePath("/", "layout");
@@ -187,7 +187,10 @@ export async function sendPhoneOtp(_prevState: AuthActionState, formData: FormDa
     return fail(copy.messages.missingPhone);
   }
 
-  const { error } = await supabase.auth.signInWithOtp({ phone });
+  const { error } = await supabase.auth.signInWithOtp({
+    phone,
+    options: { shouldCreateUser: false },
+  });
 
   if (error) {
     return fail(mapAuthErrorMessage(error.message, copy));

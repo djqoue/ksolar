@@ -5,13 +5,15 @@ import { LanguageSwitcher } from "@/components/language-switcher";
 import { LoginForms } from "@/components/login-forms";
 import { Card, CardContent } from "@/components/ui/card";
 import { getDialCodeForCountry } from "@/lib/auth/country-codes";
-import { isSupabaseConfigured, SUPABASE_ENV_KEYS } from "@/lib/auth/supabase-config";
+import { isPublicSignupEnabled } from "@/lib/auth/signup-policy";
+import { isSupabaseConfigured } from "@/lib/auth/supabase-config";
 import { getAuthCopy, LOCALE_COOKIE_NAME, resolveAppLocale } from "@/lib/i18n";
-import { getCurrentSupabaseUser } from "@/lib/supabase/server";
+import { getCurrentActiveSalesUser } from "@/lib/supabase/server";
 
 export default async function LoginPage() {
   const configured = isSupabaseConfigured();
-  const user = configured ? await getCurrentSupabaseUser() : null;
+  const signupEnabled = isPublicSignupEnabled();
+  const user = configured ? await getCurrentActiveSalesUser() : null;
   const requestHeaders = await headers();
   const cookieStore = await cookies();
   const locale = resolveAppLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
@@ -58,14 +60,16 @@ export default async function LoginPage() {
             <Card className="border-amber-300 bg-amber-50">
               <CardContent className="p-5 text-sm leading-6 text-amber-950">
                 {copy.page.supabaseMissing}
-                <span className="mt-2 block font-mono text-xs">
-                  {SUPABASE_ENV_KEYS.join(" / ")}
-                </span>
               </CardContent>
             </Card>
           ) : null}
 
-          <LoginForms configured={configured} defaultDialCode={defaultDialCode} locale={locale} />
+          <LoginForms
+            configured={configured}
+            defaultDialCode={defaultDialCode}
+            locale={locale}
+            signupEnabled={signupEnabled}
+          />
         </section>
       </div>
     </main>

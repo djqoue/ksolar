@@ -7,7 +7,7 @@ import { calculateRoofPotential } from "@/lib/calc/roof";
 import { findSelectableTier, recommendCapacityTier } from "@/lib/calc/sizing";
 import { calculateTariffValue } from "@/lib/calc/tariff";
 import { findBattery } from "@/lib/config/battery-catalog";
-import { findInverter } from "@/lib/config/inverter-catalog";
+import { filterResidentialInverters } from "@/lib/config/inverter-catalog";
 import { DEFAULT_PANEL_ID, findPanel, getPanelAreaM2 } from "@/lib/config/panel-catalog";
 import { SOLAR_DEFAULTS } from "@/lib/config/solar";
 import type { QuoteScenarioInput, QuoteScenarioResult } from "@/types/quote";
@@ -16,6 +16,25 @@ const GOOGLE_SELECTION_MISMATCH_WARNING =
   "Google Solar is not matched to the selected roof. Redraw the roof or re-center the map before trusting the quote.";
 const PACKAGE_CAP_WARNING =
   "Current package is capped below the estimated roof fit. Review whether the customer site should use a larger package or switch phase.";
+const INCOMPATIBLE_INVERTER_WARNING =
+  "Selected inverter is unavailable or incompatible with the current phase and mode. Automatic BOM selection was used instead.";
+
+function getGoogleSpecificYieldDcKWhPerKWp(input: {
+  googleAnnualGenerationKWh?: number | null;
+  googleMatchedRoof?: boolean;
+  roofFitSystemWp: number;
+}) {
+  if (
+    !input.googleMatchedRoof ||
+    !input.googleAnnualGenerationKWh ||
+    input.googleAnnualGenerationKWh <= 0 ||
+    input.roofFitSystemWp <= 0
+  ) {
+    return null;
+  }
+
+  return input.googleAnnualGenerationKWh / (input.roofFitSystemWp / 1000);
+}
 
 export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenarioResult {
   const selectedPanel = findPanel(input.selectedPanelId || DEFAULT_PANEL_ID);
@@ -34,11 +53,15 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
     input.googleMatchedRoof && input.googleSellableFitWp !== null && input.googleSellableFitWp !== undefined
       ? input.googleSellableFitWp
       : roofFitPanelCount * selectedPanelPowerWp;
-  const roofPotentialGeneration = calculateGeneration(roofFitSystemWp);
-  const roofPotentialAnnualGenerationKWh =
-    input.googleMatchedRoof && input.googleAnnualGenerationKWh !== null && input.googleAnnualGenerationKWh !== undefined
-      ? input.googleAnnualGenerationKWh
-      : roofPotentialGeneration.annualGenerationKWh;
+  const googleSpecificYieldDcKWhPerKWp = getGoogleSpecificYieldDcKWhPerKWp({
+    googleAnnualGenerationKWh: input.googleAnnualGenerationKWh,
+    googleMatchedRoof: input.googleMatchedRoof,
+    roofFitSystemWp,
+  });
+  const roofPotentialGeneration = calculateGeneration(roofFitSystemWp, {
+    googleSpecificYieldDcKWhPerKWp,
+  });
+  const roofPotentialAnnualGenerationKWh = roofPotentialGeneration.annualGenerationKWh;
   const tierRecommendation = recommendCapacityTier(input.topology.phase, roofFitPanelCount);
   const selectedTier = findSelectableTier(
     input.topology.phase,
@@ -65,6 +88,9 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
       quotedSystemSizeWp: 0,
       systemSizeWp: roofFitSystemWp || roof.theoreticalWp,
       annualGenerationKWh: 0,
+      generationModel: roofPotentialGeneration.model,
+      generationSpecificYieldKWhPerKWp: roofPotentialGeneration.specificYieldKWhPerKWp,
+      generationSystemLossRatio: roofPotentialGeneration.systemLossRatio,
       annualSelfUseKWh: 0,
       annualExportKWh: 0,
       annualSelfUseSavingsTHB: 0,
@@ -97,7 +123,9 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
     warnings.push(PACKAGE_CAP_WARNING);
   }
 
-  const generation = calculateGeneration(quotedSystemSizeWp);
+  const generation = calculateGeneration(quotedSystemSizeWp, {
+    googleSpecificYieldDcKWhPerKWp,
+  });
   const tariff = calculateTariffValue({
     annualGenerationKWh: generation.annualGenerationKWh,
     ftRateTHBPerKWh: input.ftRateTHBPerKWh,
@@ -105,10 +133,20 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
     exportRateTHBPerKWh: input.exportRateTHBPerKWh,
   });
   // Resolve equipment overrides from catalog selections
-  const selectedInverter =
+  const requestedInverterId =
     input.selectedInverterId && input.selectedInverterId !== "auto"
-      ? findInverter(input.selectedInverterId)
-      : undefined;
+      ? input.selectedInverterId
+      : null;
+  const selectedInverter = requestedInverterId
+    ? filterResidentialInverters(input.topology.phase, input.topology.mode).find(
+        (inverter) => inverter.id === requestedInverterId,
+      )
+    : undefined;
+
+  if (requestedInverterId && !selectedInverter) {
+    warnings.push(INCOMPATIBLE_INVERTER_WARNING);
+  }
+
   const selectedBattery =
     input.selectedBatteryId && input.selectedBatteryId !== "auto"
       ? findBattery(input.selectedBatteryId)
@@ -153,6 +191,9 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
       quotedSystemSizeWp,
       systemSizeWp: roofFitSystemWp,
       annualGenerationKWh: generation.annualGenerationKWh,
+      generationModel: generation.model,
+      generationSpecificYieldKWhPerKWp: generation.specificYieldKWhPerKWp,
+      generationSystemLossRatio: generation.systemLossRatio,
       annualSelfUseKWh: tariff.annualSelfUseKWh,
       annualExportKWh: tariff.annualExportKWh,
       annualSelfUseSavingsTHB: tariff.annualSelfUseSavingsTHB,
@@ -203,6 +244,9 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
     quotedSystemSizeWp,
     systemSizeWp: roofFitSystemWp,
     annualGenerationKWh: generation.annualGenerationKWh,
+    generationModel: generation.model,
+    generationSpecificYieldKWhPerKWp: generation.specificYieldKWhPerKWp,
+    generationSystemLossRatio: generation.systemLossRatio,
     annualSelfUseKWh: tariff.annualSelfUseKWh,
     annualExportKWh: tariff.annualExportKWh,
     annualSelfUseSavingsTHB: tariff.annualSelfUseSavingsTHB,
@@ -227,6 +271,9 @@ export function calculateQuoteScenario(input: QuoteScenarioInput): QuoteScenario
       roofPotentialAnnualGenerationKWh,
       quotedSystemSizeWp,
       annualGenerationKWh: generation.annualGenerationKWh,
+      generationModel: generation.model,
+      generationSpecificYieldKWhPerKWp: generation.specificYieldKWhPerKWp,
+      generationSystemLossRatio: generation.systemLossRatio,
       annualSelfUseSavingsTHB: tariff.annualSelfUseSavingsTHB,
       annualExportRevenueTHB: tariff.annualExportRevenueTHB,
       annualSavingsTHB: tariff.annualSavingsTHB,

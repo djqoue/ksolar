@@ -75,7 +75,11 @@ export function QuoteResults({
                 ? `หลังคารองรับได้ประมาณ ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp เลือกแพ็กเกจตามงบลูกค้า ราคาและคืนทุนจะปรับทันที`
                 : `Roof limit is about ${formatNumber(result.roofFitSystemWp / 1000, 2)} kWp. Pick a standard package and price/payback update instantly.`}
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <div
+            className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5"
+            role="group"
+            aria-label={locale === "zh" ? "客户容量" : locale === "th" ? "ขนาดแพ็กเกจ" : "Customer package"}
+          >
             {availableQuoteTiers.map((tier) => {
               const isActive = result.recommendedTier?.id === tier.id;
               const realSizeKw = (tier.panelCount * sellablePanelProfile.powerWp) / 1000;
@@ -84,6 +88,7 @@ export function QuoteResults({
                 <button
                   key={tier.id}
                   type="button"
+                  aria-pressed={isActive}
                   onClick={() => onSelectedTierChange(tier.id)}
                   className={
                     isActive
@@ -107,7 +112,7 @@ export function QuoteResults({
           {selectedTierId ? (
             <button
               type="button"
-              className="justify-self-start text-sm font-semibold text-slate-900 underline underline-offset-4"
+              className="min-h-11 justify-self-start rounded-lg px-2 text-sm font-semibold text-slate-900 underline underline-offset-4"
               onClick={() => onSelectedTierChange(null)}
             >
               {locale === "zh" ? "恢复系统推荐" : locale === "th" ? "กลับไปใช้คำแนะนำระบบ" : "Restore system recommendation"}
@@ -224,6 +229,25 @@ export function QuoteResults({
             <SummaryMetric label={copy.quote.quotedAnnualGeneration} value={`${formatNumber(result.annualGenerationKWh)} kWh`} />
             <SummaryMetric label={copy.quote.sellPrice} value={formatCurrency(result.suggestedSellPriceTHB)} />
             <SummaryMetric label={copy.quote.netCustomerPrice} value={formatCurrency(result.finance.financeAdjustedPriceTHB)} />
+          </div>
+          <div
+            className={
+              result.generationModel === "google-solar-calibrated"
+                ? "rounded-[1.15rem] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium leading-6 text-emerald-950"
+                : "rounded-[1.15rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium leading-6 text-amber-950"
+            }
+          >
+            {result.generationModel === "google-solar-calibrated"
+              ? locale === "zh"
+                ? `当前报价年发电量已用 Google Solar 的屋顶日照、阴影、坡度和朝向校准，并扣除 ${formatNumber(result.generationSystemLossRatio * 100, 0)}% 系统损耗。单位发电量约 ${formatNumber(result.generationSpecificYieldKWhPerKWp, 0)} kWh/kWp/年。`
+                : locale === "th"
+                  ? `พลังงานของใบเสนอราคานี้ปรับด้วย Google Solar ทั้งแดด เงา ความลาด และทิศทางหลังคา แล้วหัก loss ระบบ ${formatNumber(result.generationSystemLossRatio * 100, 0)}% เหลือประมาณ ${formatNumber(result.generationSpecificYieldKWhPerKWp, 0)} kWh/kWp/ปี`
+                  : `Quoted annual energy is calibrated by Google Solar roof sun access, shade, pitch, and azimuth, then derated by ${formatNumber(result.generationSystemLossRatio * 100, 0)}% system loss. Specific yield is about ${formatNumber(result.generationSpecificYieldKWhPerKWp, 0)} kWh/kWp/yr.`
+              : locale === "zh"
+                ? `当前未匹配 Google Solar 屋顶模型，报价年发电量使用泰国默认 4.0h 日照和 ${formatNumber(result.generationSystemLossRatio * 100, 0)}% 系统损耗。`
+                : locale === "th"
+                  ? `ยังไม่ตรงกับโมเดลหลังคา Google Solar จึงใช้สมมติฐานไทยเริ่มต้น แดด 4.0 ชั่วโมง และ loss ระบบ ${formatNumber(result.generationSystemLossRatio * 100, 0)}%`
+                  : `Google Solar is not matched, so quoted annual energy uses the Thailand default: 4.0 sun-hours and ${formatNumber(result.generationSystemLossRatio * 100, 0)}% system loss.`}
           </div>
 
           {(result.benchmarkLowTHB || result.benchmarkHighTHB) && (

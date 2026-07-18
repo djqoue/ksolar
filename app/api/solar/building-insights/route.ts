@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RUNTIME_FALLBACKS } from "@/lib/config/runtime-fallbacks";
 import { buildGoogleApiErrorPayload } from "@/lib/google-api-errors";
+import { requireAuthenticatedApiUser } from "@/lib/server/api-auth";
 import { formatGoogleDate } from "@/lib/solar";
 import type { GoogleSolarSummary } from "@/types/solar";
 
@@ -261,6 +262,12 @@ function normalizeBuildingInsightsResponse(
 }
 
 export async function GET(request: NextRequest) {
+  const authError = await requireAuthenticatedApiUser();
+
+  if (authError) {
+    return authError;
+  }
+
   const apiKey = process.env.GOOGLE_SOLAR_API_KEY || RUNTIME_FALLBACKS.googleSolarApiKey;
   if (!apiKey) {
     return NextResponse.json(
@@ -270,13 +277,31 @@ export async function GET(request: NextRequest) {
   }
 
   const searchParams = request.nextUrl.searchParams;
-  const latitude = searchParams.get("latitude");
-  const longitude = searchParams.get("longitude");
+  const latitudeParam = searchParams.get("latitude");
+  const longitudeParam = searchParams.get("longitude");
   const requiredQuality = searchParams.get("requiredQuality") || "MEDIUM";
 
-  if (!latitude || !longitude) {
+  if (!latitudeParam?.trim() || !longitudeParam?.trim()) {
     return NextResponse.json(
-      { error: "Both latitude and longitude are required." },
+      { error: "Valid latitude and longitude are required." },
+      { status: 400 },
+    );
+  }
+
+  const latitude = Number(latitudeParam);
+  const longitude = Number(longitudeParam);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180 ||
+    !["HIGH", "MEDIUM", "BASE"].includes(requiredQuality)
+  ) {
+    return NextResponse.json(
+      { error: "Valid latitude, longitude, and imagery quality are required." },
       { status: 400 },
     );
   }
@@ -289,8 +314,8 @@ export async function GET(request: NextRequest) {
 
   for (const candidateQuality of qualityCandidates) {
     const url = new URL("https://solar.googleapis.com/v1/buildingInsights:findClosest");
-    url.searchParams.set("location.latitude", latitude);
-    url.searchParams.set("location.longitude", longitude);
+    url.searchParams.set("location.latitude", String(latitude));
+    url.searchParams.set("location.longitude", String(longitude));
     url.searchParams.set("requiredQuality", candidateQuality);
     url.searchParams.set("key", apiKey);
 

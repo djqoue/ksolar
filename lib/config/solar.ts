@@ -14,6 +14,13 @@ export const SOLAR_DEFAULTS = {
   degradationRatio: 0.005,
   tariffEscalationRatio: 0.02,
   annualOMRatio: 0.01,
+  defaultPpaRateTHBPerKWh: 3.0,
+  defaultPpaCapexTHBPerWp: 18,
+  defaultPpaContractYears: 15,
+  defaultPpaEscalationRatio: 0,
+  mountingDeadLoadKgPerM2: 3,
+  structuralReviewLoadKgPerM2: 15,
+  structuralMaxIndicativeLoadKgPerM2: 20,
 } as const;
 
 export const CAPACITY_TIERS: CapacityTier[] = [
@@ -29,4 +36,3 @@ export const DEFAULT_TOPOLOGY: SystemTopology = {
   mode: "ongrid",
   batteryMode: "none",
 };
-

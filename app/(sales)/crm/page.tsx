@@ -28,6 +28,10 @@ export default async function CrmPage() {
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
+    if (process.env.NODE_ENV === "production") {
+      redirect("/login");
+    }
+
     return (
       <main className="ksolar-shell min-h-screen px-4 py-8">
         <Card className="mx-auto max-w-3xl border-amber-300 bg-amber-50">
@@ -47,6 +51,16 @@ export default async function CrmPage() {
     redirect("/login");
   }
 
+  const { data: salesProfile, error: salesProfileError } = await supabase
+    .from("sales_profiles")
+    .select("active")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (salesProfileError || !salesProfile?.active) {
+    redirect("/login");
+  }
+
   const [customers, opportunities, quotes, visits] = await Promise.all([
     getCount(supabase, "customers", user.id),
     getCount(supabase, "opportunities", user.id),
@@ -55,6 +69,7 @@ export default async function CrmPage() {
   ]);
 
   const hasMigrationError = [customers, opportunities, quotes, visits].some((item) => item.error);
+  const unavailableLabel = locale === "zh" ? "暂不可用" : locale === "th" ? "ไม่พร้อมใช้งาน" : "Unavailable";
 
   return (
     <main className="ksolar-shell min-h-screen px-4 py-6">
@@ -90,10 +105,10 @@ export default async function CrmPage() {
         ) : null}
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard icon={Users} label={crmCopy.metrics.customers} value={customers.count} />
-          <MetricCard icon={BarChart3} label={crmCopy.metrics.opportunities} value={opportunities.count} />
-          <MetricCard icon={FileText} label={crmCopy.metrics.quotes} value={quotes.count} />
-          <MetricCard icon={Database} label={crmCopy.metrics.visits} value={visits.count} />
+          <MetricCard icon={Users} label={crmCopy.metrics.customers} value={customers.error ? null : customers.count} unavailableLabel={unavailableLabel} />
+          <MetricCard icon={BarChart3} label={crmCopy.metrics.opportunities} value={opportunities.error ? null : opportunities.count} unavailableLabel={unavailableLabel} />
+          <MetricCard icon={FileText} label={crmCopy.metrics.quotes} value={quotes.error ? null : quotes.count} unavailableLabel={unavailableLabel} />
+          <MetricCard icon={Database} label={crmCopy.metrics.visits} value={visits.error ? null : visits.count} unavailableLabel={unavailableLabel} />
         </section>
 
         <Card className="border-white/75 bg-white/90">
@@ -114,7 +129,17 @@ export default async function CrmPage() {
   );
 }
 
-function MetricCard({ icon: Icon, label, value }: { icon: ComponentType<{ className?: string }>; label: string; value: number }) {
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  unavailableLabel,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: number | null;
+  unavailableLabel: string;
+}) {
   return (
     <Card className="border-white/75 bg-white/90">
       <CardContent className="p-5">
@@ -122,7 +147,9 @@ function MetricCard({ icon: Icon, label, value }: { icon: ComponentType<{ classN
           <div className="metric-label">{label}</div>
           <Icon className="size-4 text-emerald-600" />
         </div>
-        <div className="mt-3 text-3xl font-semibold tracking-[-0.055em]">{value}</div>
+        <div className="mt-3 text-3xl font-semibold tracking-[-0.055em]" aria-label={value === null ? unavailableLabel : undefined}>
+          {value === null ? "—" : value}
+        </div>
       </CardContent>
     </Card>
   );

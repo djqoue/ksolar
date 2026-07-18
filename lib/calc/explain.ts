@@ -1,6 +1,7 @@
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 import type { BomScenario } from "@/types/bom";
 import type { FinanceSelectionSummary } from "@/types/finance";
+import type { GenerationModel } from "@/lib/calc/generation";
 import type { CalculationExplanation } from "@/types/quote";
 
 export function buildCalculationExplanation(input: {
@@ -14,6 +15,9 @@ export function buildCalculationExplanation(input: {
   roofPotentialAnnualGenerationKWh: number;
   quotedSystemSizeWp: number;
   annualGenerationKWh: number;
+  generationModel: GenerationModel;
+  generationSpecificYieldKWhPerKWp: number;
+  generationSystemLossRatio: number;
   annualSelfUseSavingsTHB: number;
   annualExportRevenueTHB: number;
   annualSavingsTHB: number;
@@ -50,6 +54,12 @@ export function buildCalculationExplanation(input: {
       description:
         "Roof potential is an engineering estimate. Formal annual energy and savings are based on the quoted package after phase and topology are confirmed.",
       metrics: {
+        "Generation source":
+          input.generationModel === "google-solar-calibrated"
+            ? "Google Solar calibrated"
+            : "Thailand default",
+        "Specific yield": `${formatNumber(input.generationSpecificYieldKWhPerKWp, 0)} kWh/kWp/yr`,
+        "System loss": formatPercent(input.generationSystemLossRatio * 100),
         "Quoted annual generation": `${formatNumber(input.annualGenerationKWh)} kWh`,
         "Retail rate": `${formatNumber(input.retailRateTHBPerKWh, 2)} THB/kWh`,
         "Self-use ratio": formatPercent(input.selfConsumptionRatio * 100),

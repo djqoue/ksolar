@@ -1,20 +1,41 @@
 import { NextResponse } from "next/server";
 import { buildGoogleApiErrorPayload } from "@/lib/google-api-errors";
 import { resolveAppLocale } from "@/lib/i18n";
+import { requireAuthenticatedApiUser } from "@/lib/server/api-auth";
 
 const GOOGLE_GEOCODING_ENDPOINT = "https://maps.googleapis.com/maps/api/geocode/json";
 
 export async function GET(request: Request) {
+  const authError = await requireAuthenticatedApiUser();
+
+  if (authError) {
+    return authError;
+  }
+
   const { searchParams } = new URL(request.url);
-  const latitude = Number(searchParams.get("lat"));
-  const longitude = Number(searchParams.get("lng"));
+  const latitudeParam = searchParams.get("lat");
+  const longitudeParam = searchParams.get("lng");
   const locale = resolveAppLocale(searchParams.get("locale"));
 
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+  if (!latitudeParam?.trim() || !longitudeParam?.trim()) {
     return NextResponse.json({ formattedAddress: null, error: "Invalid coordinates." }, { status: 400 });
   }
 
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const latitude = Number(latitudeParam);
+  const longitude = Number(longitudeParam);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    return NextResponse.json({ formattedAddress: null, error: "Invalid coordinates." }, { status: 400 });
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
   if (!apiKey) {
     return NextResponse.json({ formattedAddress: null, error: "Google Maps key is not configured." });

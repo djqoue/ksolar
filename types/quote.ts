@@ -1,5 +1,6 @@
 import type { BomScenario, CapacityTier, SystemTopology } from "@/types/bom";
 import type { FinanceSelectionSummary } from "@/types/finance";
+import type { GenerationModel } from "@/lib/calc/generation";
 
 export type ShapeKind = "polygon" | "rectangle" | "manual";
 
@@ -70,6 +71,9 @@ export interface QuoteScenarioResult {
   quotedSystemSizeWp: number;
   systemSizeWp: number;
   annualGenerationKWh: number;
+  generationModel: GenerationModel;
+  generationSpecificYieldKWhPerKWp: number;
+  generationSystemLossRatio: number;
   annualSelfUseKWh: number;
   annualExportKWh: number;
   annualSelfUseSavingsTHB: number;
