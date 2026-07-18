@@ -27,12 +27,15 @@ import { formatNumber } from "@/lib/utils";
 import { SOLAR_DEFAULTS } from "@/lib/config/solar";
 import { buildGoogleSolarPanelFootprints, isSolarPointInsideSelection, type SolarSelectionMatchSummary } from "@/lib/solar";
 import type { MapSelectionSummary, RoofShape, ShapeKind } from "@/types/quote";
-import type { GoogleSolarSummary } from "@/types/solar";
+import type { GoogleSolarSummary, SolarLatLng } from "@/types/solar";
 
 interface MapProps {
   value: MapSelectionSummary;
   onChange: (value: MapSelectionSummary) => void;
-  onCenterChange?: (value: { latitude: number; longitude: number }) => void;
+  onCenterChange?: (value: SolarLatLng) => void;
+  searchValue: string;
+  onSearchValueChange: (value: string) => void;
+  initialCenter: SolarLatLng;
   solarInsights?: GoogleSolarSummary | null;
   solarSelectionMatch?: SolarSelectionMatchSummary | null;
   focusPoint?: { latitude: number; longitude: number } | null;
@@ -145,6 +148,9 @@ export function Map({
   value,
   onChange,
   onCenterChange,
+  searchValue,
+  onSearchValueChange,
+  initialCenter,
   solarInsights,
   solarSelectionMatch,
   focusPoint,
@@ -196,11 +202,16 @@ export function Map({
   const [manualArea, setManualArea] = useState(
     initialManualShape?.areaM2 ? String(initialManualShape.areaM2) : "",
   );
-  const [searchValue, setSearchValue] = useState("");
   const [isLocating, setIsLocating] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [locationStatus, setLocationStatus] = useState<string | null>(null);
-  const [mapCenter, setMapCenter] = useState(DEFAULT_MAP_CENTER);
+  const [mapCenter, setMapCenter] = useState(() => ({
+    lat: initialCenter.latitude,
+    lng: initialCenter.longitude,
+  }));
+  const [initialMapZoom] = useState(() =>
+    value.shapes.some((shape) => shape.path.length > 0) ? 20 : 18,
+  );
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [drawMode, setDrawMode] = useState<ShapeKind | null>(null);
   const [drawReady, setDrawReady] = useState(false);
@@ -475,7 +486,7 @@ export function Map({
         lng: firstResult.longitude,
       };
 
-      setSearchValue(firstResult.formattedAddress || query);
+      onSearchValueChange(firstResult.formattedAddress || query);
       if (flyover) {
         flyToMapCenter(nextCenter, copy.map.statusCentered(firstResult.formattedAddress || query));
       } else {
@@ -491,6 +502,7 @@ export function Map({
     copy.map,
     flyToMapCenter,
     locale,
+    onSearchValueChange,
   ]);
 
   useEffect(() => {
@@ -514,7 +526,7 @@ export function Map({
 
     const trimmedAddress = focusAddress?.trim();
     if (trimmedAddress) {
-      setSearchValue(trimmedAddress);
+      onSearchValueChange(trimmedAddress);
       void geocodeSearchValue(trimmedAddress, true);
       return;
     }
@@ -529,6 +541,7 @@ export function Map({
     focusRequestId,
     geocodeSearchValue,
     isLoaded,
+    onSearchValueChange,
   ]);
 
   const handleSearchClick = () => {
@@ -800,7 +813,7 @@ export function Map({
                 className={immersive ? "col-span-2 h-11 rounded-xl bg-white/95 text-sm sm:col-span-1" : "col-span-2 xl:col-span-1"}
                 placeholder={copy.map.searchPlaceholder}
                 value={searchValue}
-                onChange={(event) => setSearchValue(event.target.value)}
+                onChange={(event) => onSearchValueChange(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault();
@@ -1062,7 +1075,7 @@ export function Map({
             }
             mapContainerStyle={immersiveMapContainerStyle}
             center={mapCenter}
-            zoom={18}
+            zoom={initialMapZoom}
             onLoad={(map) => {
               mapRef.current = map;
               map.setMapTypeId("satellite");

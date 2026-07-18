@@ -31,7 +31,7 @@ import {
   validateCustomerIntake,
 } from "@/lib/customer-intake";
 import { getLocalizedPresetMeta, LANGUAGE_OPTIONS, LOCALE_COOKIE_NAME, type AppLocale } from "@/lib/i18n";
-import { createEmptyMapSelection } from "@/lib/maps";
+import { createEmptyMapSelection, resolveRestoredMapCenter } from "@/lib/maps";
 import { requestSolarDataLayers, requestSolarInsights, SolarApiError } from "@/lib/solar-client";
 import {
   buildSolarSelectionMatchSummary,
@@ -87,6 +87,7 @@ function DashboardShellContent() {
   const copy = useAppCopy();
   const customerCopy = getCustomerIntakeCopy(locale);
   const [mapSelection, setMapSelection] = useState<MapSelectionSummary>(createEmptyMapSelection());
+  const [mapSearchValue, setMapSearchValue] = useState(initialCustomerIntake.addressText);
   const [topology, setTopology] = useState(DEFAULT_TOPOLOGY);
   const [pricingPresetId, setPricingPresetId] = useState<PricingPreset["id"]>("standard");
   const [selectedPanelId, setSelectedPanelId] = useState<string>(DEFAULT_PANEL_ID);
@@ -497,7 +498,7 @@ function DashboardShellContent() {
           solarWarning: "Google Solar 需复核",
           solarWaiting: "等待 Google Solar",
           refresh: "刷新校验",
-          editRoof: "重画屋顶",
+          editRoof: "编辑已选屋顶",
           roofMax: "屋顶上限",
           maxPanels: "最多板数",
           recognizedRoofMax: "已识别上限",
@@ -884,6 +885,10 @@ function DashboardShellContent() {
     setSolarErrorMessage(null);
   }, []);
 
+  const handleMapSearchValueChange = useCallback((value: string) => {
+    setMapSearchValue(value);
+  }, []);
+
   const handleTopologyChange = (value: SystemTopology) => {
     setTopology(value);
     setSelectedInverterId((currentId) => {
@@ -915,6 +920,7 @@ function DashboardShellContent() {
     setCustomerIntake(value);
 
     if (siteChanged) {
+      setMapSearchValue(value.addressText);
       setMapSelection(createEmptyMapSelection());
       setMapCenter(null);
       setSolarInsights(null);
@@ -937,6 +943,10 @@ function DashboardShellContent() {
   };
 
   const customerFocusPoint = useMemo(() => parseCustomerFocusPoint(customerIntake), [customerIntake]);
+  const restoredMapCenter = useMemo(
+    () => resolveRestoredMapCenter(mapSelection.shapes, mapCenter, customerFocusPoint),
+    [customerFocusPoint, mapCenter, mapSelection.shapes],
+  );
 
   const continueFromCustomer = async () => {
     if (allowCustomerIntakeSkip && !customerValidation.ready) {
@@ -1220,6 +1230,9 @@ function DashboardShellContent() {
                 value={mapSelection}
                 onChange={handleMapSelectionChange}
                 onCenterChange={handleMapCenterChange}
+                searchValue={mapSearchValue}
+                onSearchValueChange={handleMapSearchValueChange}
+                initialCenter={restoredMapCenter}
                 solarInsights={activeSolarInsights}
                 solarSelectionMatch={solarSelectionMatch}
                 focusPoint={customerFocusPoint}
