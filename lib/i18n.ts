@@ -653,6 +653,10 @@ export const APP_COPY = {
           "Google Solar is not matched to the selected roof. Redraw the roof or re-center the map before trusting the quote.",
         packageCap:
           "Current quoted package is smaller than the estimated roof fit. Review whether the project should move to a larger package or a different phase.",
+        roofPotential:
+          "Roof potential is a technical capacity assessment, not a committed package price. Select 5, 10, 15, or 20 kW to create a formal quote.",
+        engineeringReview:
+          "Roof potential exceeds the committed BOM range for the selected phase. Engineering must confirm phase, inverter architecture, protection, structure, and interconnection before pricing.",
       },
     },
   },
@@ -1003,6 +1007,10 @@ export const APP_COPY = {
           "Google Solar 当前没有匹配到你圈选的屋顶。请重新圈选屋顶或重新定位地图后，再信任这个报价。",
         packageCap:
           "当前报价方案低于屋顶估算可铺容量。请检查是否应该切换到更大的方案，或改用更合适的相位配置。",
+        roofPotential:
+          "屋顶最大模式只用于技术容量评估，不是承诺性套餐价格。请选择 5、10、15 或 20 kW 后再生成正式报价。",
+        engineeringReview:
+          "屋顶潜力已超出当前相位的标准 BOM 范围。定价前必须由工程人员确认相位、逆变器架构、保护方案、屋顶结构和并网条件。",
       },
     },
   },
@@ -1354,6 +1362,10 @@ export const APP_COPY = {
           "Google Solar ยังไม่ตรงกับหลังคาที่คุณเลือก โปรดวาดหลังคาใหม่หรือจัดตำแหน่งแผนที่ก่อนเชื่อราคาเสนอ",
         packageCap:
           "แพ็กเกจที่กำลังเสนอเล็กกว่าขนาดที่หลังคารองรับได้ ควรตรวจว่าควรเปลี่ยนเป็นแพ็กเกจที่ใหญ่ขึ้นหรือเปลี่ยน phase หรือไม่",
+        roofPotential:
+          "โหมดศักยภาพหลังคาใช้ประเมินกำลังทางเทคนิคเท่านั้น ไม่ใช่ราคาแพ็กเกจที่ยืนยันแล้ว โปรดเลือก 5, 10, 15 หรือ 20 kW เพื่อสร้างใบเสนอราคาอย่างเป็นทางการ",
+        engineeringReview:
+          "ศักยภาพหลังคาสูงกว่าช่วง BOM มาตรฐานของเฟสที่เลือก วิศวกรต้องยืนยันเฟส โครงสร้างอินเวอร์เตอร์ ระบบป้องกัน โครงสร้างหลังคา และเงื่อนไขการเชื่อมต่อระบบก่อนกำหนดราคา",
       },
     },
   },
@@ -1392,6 +1404,14 @@ export function localizeWarning(locale: AppLocale, warning: string) {
 
   if (warning === "Current package is capped below the estimated roof fit. Review whether the customer site should use a larger package or switch phase.") {
     return copy.calc.warnings.packageCap;
+  }
+
+  if (warning === "Roof potential is a technical capacity assessment, not a committed package price. Select 5, 10, 15, or 20 kW to create a formal quote.") {
+    return copy.calc.warnings.roofPotential;
+  }
+
+  if (warning === "Roof potential exceeds the committed BOM range for the selected phase. Engineering must confirm phase, inverter architecture, protection, structure, and interconnection before pricing.") {
+    return copy.calc.warnings.engineeringReview;
   }
 
   return warning;
