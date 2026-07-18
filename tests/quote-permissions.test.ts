@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const dbMigration = readFileSync(
-  join(process.cwd(), "db/migrations/202607180003_quote_atomic_save.sql"),
+  join(process.cwd(), "db/migrations/20260718064305_202607180003_quote_atomic_save.sql"),
   "utf8",
 );
 const supabaseMigration = readFileSync(
-  join(process.cwd(), "supabase/migrations/202607180003_quote_atomic_save.sql"),
+  join(process.cwd(), "supabase/migrations/20260718064305_202607180003_quote_atomic_save.sql"),
   "utf8",
 );
 const normalizedSql = dbMigration.replace(/\s+/g, " ").toLowerCase();
